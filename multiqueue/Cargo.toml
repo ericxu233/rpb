@@ -1,0 +1,21 @@
+[package]
+name = "multiqueue"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "*"
+clap.workspace = true
+rayon.workspace = true
+
+[[bin]]
+name = "sssp"
+path = "src/benchmarks/sssp/dijkstra.rs"
+
+[[bin]]
+name = "sssp_seq"
+path = "src/benchmarks/sssp/dijkstra_seq.rs"
+
+[[bin]]
+name = "bfs"
+path = "src/benchmarks/bfs/parallel.rs"

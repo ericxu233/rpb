@@ -1,20 +1,21 @@
+use std::slice::from_raw_parts_mut;
 // ============================================================================
-// This code is part of Rusty-PBBS.
+// This code is part of RPB.
 // ----------------------------------------------------------------------------
 // MIT License
-// 
+//
 // Copyright (c) 2023-present Javad Abdi, Mark C. Jeffrey
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,7 +25,6 @@
 // SOFTWARE.
 // ============================================================================
 
-use std::slice::from_raw_parts_mut;
 
 use rayon::prelude::*;
 use enhanced_rayon::prelude::*;
@@ -71,7 +71,7 @@ fn split_segment(
             ).collect::<Vec<_>>();
 
         scan_inplace( &mut names, true, |a, b| a.max(b) );
-        
+
         ranks
             .par_ind_iter_mut_by(|i| cs[i].1 as usize, l)
             .enumerate()
@@ -362,7 +362,7 @@ fn atomic_split_segment(
             ).collect::<Vec<_>>();
 
         scan_inplace( &mut names, true, |a, b| a.max(b) );
-        
+
         (0..l)
             .into_par_iter()
             .for_each(|i| {

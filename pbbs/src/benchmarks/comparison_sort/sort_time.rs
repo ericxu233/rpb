@@ -1,20 +1,21 @@
+#![allow(dead_code)]
 // ============================================================================
-// This code is part of Rusty-PBBS.
+// This code is part of RPB.
 // ----------------------------------------------------------------------------
 // MIT License
-// 
+//
 // Copyright (c) 2023-present Javad Abdi, Mark C. Jeffrey
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,7 +25,6 @@
 // SOFTWARE.
 // ============================================================================
 
-#![allow(dead_code)]
 
 #[path ="../macros.rs"] mod macros;
 #[path ="../../common/io.rs"] mod io;
@@ -51,7 +51,7 @@ define_algs!(
 
 pub fn run<T, F>(
     alg: Algs,
-    rounds: usize, 
+    rounds: usize,
     stable: bool,
     less: F,
     inp: &[T]
@@ -79,7 +79,7 @@ pub fn run<T, F>(
         || { f(&mut r, less, stable) },
         || {}
     );
-    
+
     (r, mean)
 }
 

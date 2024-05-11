@@ -1,20 +1,21 @@
+use std::ops::*;
 // ============================================================================
-// This code is part of Rusty-PBBS.
+// This code is part of RPB.
 // ----------------------------------------------------------------------------
 // MIT License
-// 
+//
 // Copyright (c) 2023-present Javad Abdi, Mark C. Jeffrey
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,7 +25,6 @@
 // SOFTWARE.
 // ============================================================================
 
-use std::ops::*;
 use std::str::FromStr;
 use std::fmt::{Debug, Display, LowerExp};
 use num_traits::Float;
@@ -292,7 +292,7 @@ pub fn min_angle_check<T: Float>(
     let (ba, ca, cb) = (b-a, c-a, c-b);
     let (lba, lca, lcb) = (ba.length(), ca.length(), cb.length());
     let co = T::from((angle.to_f64().unwrap() * PI / 180.0).cos()).unwrap();
-    
+
     ba.dot(ca) / (lba * lca) > co
         || ca.dot(cb) / (lca * lcb) > co
         || -ba.dot(cb) / (lba * lcb) > co
@@ -306,7 +306,7 @@ pub fn triangle_circumcenter<T: Float>(
 ) -> Point2d<T> {
     let (v1, v2) = (b-a, c-a);
     let (v11, v22) = (v1 * v2.dot(v2), v2 * v1.dot(v1));
-    
+
     a + Vector2d::new(v22.y - v11.y, v11.x - v22.x)
         / (T::from(2.0).unwrap() * v1.cross(v2))
 }

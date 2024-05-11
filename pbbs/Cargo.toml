@@ -4,16 +4,21 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap.workspace = true
 rayon.workspace = true
 num-traits.workspace = true
 affinity = "0.1.2"
 crossbeam   = "0.8.2"
 parlay  = { path = "../parlay/" }
 enhanced_rayon  = { path = "../enhanced_rayon/" }
-clap = { version = "4.3.4", features = ["derive"] }
 
 [features]
 default = ["mem_safe", "rng_ind_safe", "sng_ind_safe", "AW_safe"]
+
+synchronized = ["mem_safe", "rng_ind_safe", "sng_ind_atomic", "AW_safe"]
+interior_unsafe = ["mem_safe", "rng_ind_safe", "sng_ind_safe"]
+unsafe = ["mem_safe", "rng_ind_safe", "sng_ind_unsafe"]
+
 rng_ind_safe = ["enhanced_rayon/rng_ind_safe", "parlay/rng_ind_safe"]
 sng_ind_safe = ["enhanced_rayon/sng_ind_safe", "parlay/sng_ind_safe"]
 sng_ind_unsafe = ["enhanced_rayon/sng_ind_unsafe", "parlay/sng_ind_unsafe"]

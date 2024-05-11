@@ -1,10 +1,14 @@
-# Rusty-PBBS: A replica of PBBS in Rust.
+# RPB: Rust Parallel Benchmarks suite.
 
-Rusty-PBBS is a benchmark suite of regular and irregular parallelism in Rust,
-introduced at SPAA'23.
+RPB is a benchmark suite of regular and irregular parallelism in Rust,
+introduced at SPAA'24.
 We invested substantial effort into developing this codebase,
 and we kindly request that you acknowledge our work
 by citing our paper when using this code for your own research:
+
+[When Is Parallelism Fearless and Zero-Cost with Rust?](https://doi.org/10.1145/3626183.3659966)<br>
+Javad Abdi, Gilead Posluns, Guozheng Zhang, Boxuan Wang, Mark C. Jeffrey<br>
+ACM Symposium on Parallelism in Algorithms and Architectures (SPAA), 2024
 
 [Brief Announcement: Is the Problem-Based Benchmark Suite Fearless with Rust?](https://doi.org/10.1145/3558481.3591313)<br>
 Javad Abdi, Guowei Zhang, Mark C. Jeffrey<br>
@@ -26,11 +30,11 @@ source "$HOME/.cargo/env"
 The `default` features are enough for benchmarking.
 If you want to do more hacking, the `complete` profile could help.
 
-## Download rusty-pbbs
+## Download RPB
 
 ```bash
-git clone https://github.com/mcj-group/rusty-pbbs.git
-cd rusty-pbbs/
+git clone https://github.com/mcj-group/rpb.git
+cd rpb/
 ```
 
 ### install gcc if you don't have it on your system.

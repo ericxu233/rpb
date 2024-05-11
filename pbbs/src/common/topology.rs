@@ -1,20 +1,21 @@
+
 // ============================================================================
-// This code is part of Rusty-PBBS.
+// This code is part of RPB.
 // ----------------------------------------------------------------------------
 // MIT License
-// 
+//
 // Copyright (c) 2023-present Javad Abdi, Mark C. Jeffrey
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,7 +24,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 // ============================================================================
-
 
 use std::default::Default;
 
@@ -247,7 +247,7 @@ impl<'a> SimpleX<'a>
     pub fn split(&self, v: &'a Vtx, ta0: &'a Tri, ta1: &'a Tri) {
         let t = self.t.unwrap();
         unsafe { make_mut!(v, Vtx).unwrap().t = self.t; }
-        
+
         let (_t1, t2, t3) = (t.ngh[0], t.ngh[1], t.ngh[2]);
         let (v1, v2, v3) = (
             t.vtx[0].unwrap(),

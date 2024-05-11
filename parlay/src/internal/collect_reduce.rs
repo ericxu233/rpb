@@ -1,20 +1,21 @@
+use std::mem::size_of;
 // ============================================================================
-// This code is part of Rusty-PBBS.
+// This code is part of RPB.
 // ----------------------------------------------------------------------------
 // MIT License
-// 
+//
 // Copyright (c) 2023-present Javad Abdi, Mark C. Jeffrey
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,7 +25,6 @@
 // SOFTWARE.
 // ============================================================================
 
-use std::mem::size_of;
 use rayon::prelude::*;
 use num_traits::{PrimInt, ToPrimitive};
 
@@ -46,11 +46,11 @@ pub trait HashEq {
 
     fn hash(&self, _a: Self::KT) -> usize { todo!() }
     fn get_key(&self, _a: Self::IT) -> Self::KT { todo!() }
-    
+
     fn get_key_mut<'a>(&'a self, _a: &'a mut Self::RT) -> &mut Self::KT {
         todo!()
     }
-    
+
     fn get_key_from_result(&self, _a: Self::RT) -> Self::KT { todo!() }
     fn equal(&self, _a: Self::KT, _b: Self::KT) -> bool { todo!() }
 }
@@ -319,7 +319,7 @@ pub fn collect_reduce<T, HEQ>(
             }
         });
         t.next("into_tables");
-    
+
         *res = sums;
     }
 }

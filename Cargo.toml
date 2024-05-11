@@ -1,7 +1,8 @@
 [workspace]
-members = ["pbbs", "parlay", "enhanced_rayon"]
-default-members = ["pbbs"]
+members = ["pbbs", "parlay", "enhanced_rayon", "multiqueue"]
+default-members = ["pbbs", "multiqueue"]
 
 [workspace.dependencies]
 rayon   = "1.7.0"
 num-traits = "0.2.15"
+clap = { version = "4.3.4", features = ["derive"] }
