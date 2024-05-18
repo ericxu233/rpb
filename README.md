@@ -61,6 +61,11 @@ To get the full list of flags and arguments use `--help`:
 /path/to/build/directory/pbbs/release/dedup --help
 ```
 
+## Inputs
+
+All the benchmarks expect their data to be in the same format that PBBS uses.
+Please check [PBBS's website](https://cmuparlay.github.io/pbbsbench/) for instruction on how to generate input data.
+
 ## Example
 
 Run parallel dedup for 3 rounds on an input.

@@ -78,7 +78,7 @@ pub fn run(alg: Algs, rounds: usize, buckets: usize, arr: &[u32]) -> (Vec<u32>, 
         "hist",
         rounds,
         Duration::new(1, 0),
-        || { unsafe { *(r_ptr as *mut Vec<u32>) = vec![]; } },
+        || { unsafe { *(r_ptr as *mut Vec<u32>).as_mut().unwrap() = vec![]; } },
         || { f(&arr, buckets, &mut r); },
         || {}
     );
