@@ -1,6 +1,10 @@
 [workspace]
 members = ["pbbs", "parlay", "enhanced_rayon", "multiqueue"]
 default-members = ["pbbs", "multiqueue"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
 
 [workspace.dependencies]
 rayon   = "1.7.0"
