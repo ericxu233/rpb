@@ -32,14 +32,13 @@ use clap::Parser;
 #[path ="../../misc.rs"] mod misc;
 #[path ="../macros.rs"] mod macros;
 #[path ="../../common/io.rs"] mod io;
-#[path ="../../common/geometry_io.rs"] mod geometry_io;
-#[path ="../../common/geometry.rs"] mod geometry;
+#[path ="../../common/mod.rs"] mod common;
 
 use misc::*;
 // use hist::{sequential, parallel};
 use io::{read_big_file_to_vec, write_slice_to_file_seq};
-use geometry_io::{read_points2d_from_file, read_points3d_from_file};
-use geometry::{Point2d, Point3d};
+use common::geometry_io::{read_points2d_from_file, read_points3d_from_file};
+use common::geometry::{Point2d, Point3d};
 
 
 #[derive(Parser, Debug)]
