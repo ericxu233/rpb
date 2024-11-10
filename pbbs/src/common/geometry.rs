@@ -29,7 +29,7 @@ use std::str::FromStr;
 use std::fmt::{Debug, Display, LowerExp};
 use num_traits::Float;
 
-use crate::common::io::fmt_f64;
+use super::io::fmt_f64;
 
 
 const PI: f64 = 3.14159;

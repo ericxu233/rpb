@@ -31,8 +31,8 @@ use num_traits::Float;
 use rayon::prelude::*;
 use rayon::str::ParallelString;
 
-use crate::common::io::read_file_to_vec;
-use crate::common::geometry::*;
+use super::io::read_file_to_vec;
+use super::geometry::*;
 
 
 const HEADER_TRI: &str = "pbbs_triangles";

@@ -1,5 +1,3 @@
-
-
 use std::time::Duration;
 // ============================================================================
 // This code is part of RPB.
@@ -85,7 +83,7 @@ impl<PT, const KK: usize> Vertex<PT, KK> {
         Self {
             identifier,
             pt,
-            ngh: Default::default(), // Initializes the array with None values
+            ngh: std::array::from_fn(|_| None),
             counter: 0,
             counter2: 0,
         }
