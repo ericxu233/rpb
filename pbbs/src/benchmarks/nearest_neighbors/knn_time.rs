@@ -122,10 +122,28 @@ fn main() {
     }
 
     if dimension == 2 {
-      let points: Vec<Point2d<f64>> = read_points2d_from_file(&ifname);
-      let (r, d) = run::<Point2d<f64>, Vector2d<f64>, f64>
+        let points: Vec<Point2d<f64>> = read_points2d_from_file(&ifname);
+        let (r, d) = run::<Point2d<f64>, Vector2d<f64>, f64>
                                               (args.algorithm, args.rounds, &points, k);
+        // convert r to list of strings
+        let r: Vec<String> = r.iter().map(|x| x.iter().map(|y| y.to_string()).collect()).collect();
+        if !ofname.is_empty() {
+            write_slice_to_file_seq(&r, &ofname);
+        }
+
+        // print the runtime
+        println!("{:?}", d);
     } else if dimension == 3 {
-      let points: Vec<Point3d<f64>> = read_points3d_from_file(&ifname);
+        let points: Vec<Point3d<f64>> = read_points3d_from_file(&ifname);
+        let (r, d) = run::<Point3d<f64>, Vector3d<f64>, f64>
+                                              (args.algorithm, args.rounds, &points, k);
+        // convert r to list of strings
+        let r: Vec<String> = r.iter().map(|x| x.iter().map(|y| y.to_string()).collect()).collect();
+        if !ofname.is_empty() {
+            write_slice_to_file_seq(&r, &ofname);
+        }
+
+        // print the runtime
+        println!("{:?}", d);
     }
 }

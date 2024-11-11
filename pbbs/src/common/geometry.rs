@@ -180,6 +180,10 @@ impl<T: Float> Point3d<T> {
     }
 }
 
+impl<T: Float> Length<T> for Point3d<T> {
+    fn length(&self) -> T { (self.x*self.x + self.y*self.y + self.z*self.z).sqrt() }
+}
+
 impl<T: Float> Add<Vector3d<T>> for Point3d<T> {
     type Output = Self;
 
