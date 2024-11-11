@@ -34,4 +34,5 @@ pub(crate) mod geometry;
 pub(crate) mod time_loop;
 pub(crate) mod geometry_io;
 pub(crate) mod topology_from_triangles;
+pub(crate) mod traits;
 

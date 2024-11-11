@@ -30,6 +30,7 @@ use std::fmt::{Debug, Display, LowerExp};
 use num_traits::Float;
 
 use crate::common::io::fmt_f64;
+use crate::common::traits::Length;
 
 
 const PI: f64 = 3.14159;
@@ -44,9 +45,12 @@ pub struct Vector2d<T: Float> { pub x: T, pub y: T }
 
 impl<T: Float> Vector2d<T> {
     pub fn new(x: T, y:T) -> Self { Self { x, y } }
-    pub fn length(&self) -> T { (self.x*self.x + self.y*self.y).sqrt() }
     pub fn dot(&self, v: Vector2d<T>) -> T { self.x*v.x + self.y*v.y }
     pub fn cross(&self, v: Vector2d<T>) -> T { self.x*v.y - self.y*v.x }
+}
+
+impl<T: Float> Length<T> for Vector2d<T> {
+  fn length(&self) -> T { (self.x*self.x + self.y*self.y).sqrt() }
 }
 
 impl<T: Float> Mul<T> for Vector2d<T> {

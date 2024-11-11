@@ -1,16 +1,16 @@
-use num_traits::PrimInt;
+use num_traits::PrimInt; // For integer traits
+use num_traits::Float;   // For float traits
 use rayon::{prelude::*, vec};
 use std::ops::Sub;
 use crate::DefInt;
 
 // Declare `trait.rs` directly in main.rs
-#[path = "traits.rs"] mod traits;
-use traits::{HasPoint, Length};
+use crate::common::traits::Length;
 
-pub fn ann<const MAXK: usize, VTX>(inp: &mut [VTX], k: usize, res: &mut Vec<Vec<usize>>)
-where
-    VTX: HasPoint + Sync + Send + Clone,
-    VTX::PointType: Copy + Sub<Output = VTX::PointType> + Length,
+pub fn ann<const MAXK: usize, P, V, F>(inp: &[P], k: usize, res: &mut Vec<Vec<usize>>)
+where P: Sync + Send + Copy + Sub<Output = V>,
+      V: Length<F>,
+      F: Float
 {
     // does not support for k > 1
     if k > 1 {
@@ -25,11 +25,11 @@ where
         .enumerate()
         .for_each(|(i, index)| {
             let mut current_nearest_index = (i + 1) % n;
-            let mut min_distance = (inp[i].pt().clone() - inp[current_nearest_index].pt().clone()).length();
+            let mut min_distance = (inp[i].clone() - inp[current_nearest_index].clone()).length();
 
             for j in 0..n {
                 if j != i {
-                    let dist = (inp[i].pt().clone() - inp[j].pt().clone()).length();
+                    let dist = (inp[i].clone() - inp[j].clone()).length();
                     if dist < min_distance {
                         current_nearest_index = j;
                         min_distance = dist;

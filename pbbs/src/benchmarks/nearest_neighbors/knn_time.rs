@@ -33,15 +33,15 @@ use clap::Parser;
 #[path ="../macros.rs"] mod macros;
 #[path ="../../common/io.rs"] mod io;
 #[path ="../../common/mod.rs"] mod common;
-#[path = "traits.rs"] mod traits;
 
 use misc::*;
 use knn::{naive};
 use io::{read_big_file_to_vec, write_slice_to_file_seq};
 use common::geometry_io::{read_points2d_from_file, read_points3d_from_file};
-use common::geometry::{Point2d, Point3d};
-use traits::{HasPoint, Length};
+use common::geometry::*;
+use common::traits::Length;
 use std::ops::Sub;
+use num_traits::Float;   // For float traits
 
 
 #[derive(Parser, Debug)]
@@ -76,40 +76,18 @@ define_algs!(
     (NAIVE, "naive")
 );
 
-struct Vertex<PT> {
-  identifier: i32,
-  pt: PT,  // the point itself, which could be either Point2d or Point3d
-  counter: usize,
-  counter2: usize,
-}
-
-impl<PT> Vertex<PT> {
-  fn new(pt: PT, identifier: i32) -> Self {
-      Self {
-          identifier,
-          pt,
-          counter: 0,
-          counter2: 0,
-      }
-  }
-
-  fn pt(&self) -> &PT {
-      &self.pt
-  }
-}
-
-pub fn run<T>(alg: Algs, rounds: usize, arr: &[Vertex<T>], k: usize) -> (Vec<Vec<usize>>, Duration)
-where
-    T: HasPoint + Sync + Send + Clone,
-    T::PointType: Copy + Sub<Output = T::PointType> + Length,
+pub fn run<P, V, F>(alg: Algs, rounds: usize, arr: &[P], k: usize) -> (Vec<Vec<usize>>, Duration)
+where P: Sync + Send + Copy + Sub<Output = V>,
+      V: Length<F>,
+      F: Float
 {
     // Define the MAXK constant (you need to choose the value based on your use case)
     const MAXK: usize = 1;
 
     // Wrap `ann` in a closure with specified generics
     let f = match alg {
-        Algs::NAIVE => |arr: &[Vertex<T>], k: usize, res: &mut Vec<Vec<usize>>| {
-            naive::ann::<MAXK, Vertex<T>>(arr, k, res)
+        Algs::NAIVE => |arr: &[P], k: usize, res: &mut Vec<Vec<usize>>| {
+            naive::ann::<MAXK, P, V, F>(arr, k, res)
         },
     };
 
@@ -145,9 +123,9 @@ fn main() {
 
     if dimension == 2 {
       let points: Vec<Point2d<f64>> = read_points2d_from_file(&ifname);
+      let (r, d) = run::<Point2d<f64>, Vector2d<f64>, f64>
+                                              (args.algorithm, args.rounds, &points, k);
     } else if dimension == 3 {
       let points: Vec<Point3d<f64>> = read_points3d_from_file(&ifname);
     }
-
-
 }
