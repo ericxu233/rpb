@@ -1,3 +1,4 @@
+use core::panic;
 use std::time::Duration;
 // ============================================================================
 // This code is part of RPB.
@@ -69,36 +70,36 @@ struct Args {
 
     /// The dimension (2 for 2D points, 3 for 3D points)
     #[clap(short = 'd', long, value_parser, required = false, default_value_t = 2)]
-    dimension: usize
+    dimension: usize,
+
+    /// Weather to Check the results or not
+    #[clap(short = 'c', long, required=false, default_value_t = false)]
+    check: bool,
 }
 
 define_algs!(
     (NAIVE, "naive")
 );
 
-pub fn run<P, V, F>(alg: Algs, rounds: usize, arr: &[P], k: usize) -> (Vec<Vec<usize>>, Duration)
-where P: Sync + Send + Copy + Sub<Output = V>,
-      V: Length<F>,
-      F: Float
+pub fn run(alg: Algs, rounds: usize, arr: &[Point2d<f64>], k: usize) -> (Vec<Vec<usize>>, Duration)
 {
     // Define the MAXK constant (you need to choose the value based on your use case)
     const MAXK: usize = 1;
+    let n = arr.len();
 
     // Wrap `ann` in a closure with specified generics
     let f = match alg {
-        Algs::NAIVE => |arr: &[P], k: usize, res: &mut Vec<Vec<usize>>| {
-            naive::ann::<MAXK, P, V, F>(arr, k, res)
-        },
+        Algs::NAIVE => {naive::ann}
     };
 
-    let mut r = vec![];
+    let mut r = vec![vec![0; k]; n];
     let r_ptr = &r as *const Vec<Vec<usize>> as usize;
 
     let mean = time_loop(
         "knn",
         rounds,
         Duration::new(1, 0),
-        || { unsafe { *(r_ptr as *mut Vec<Vec<usize>>).as_mut().unwrap() = vec![]; } },
+        || { unsafe { *(r_ptr as *mut Vec<Vec<usize>>).as_mut().unwrap() = vec![vec![0; k]; n]; } },
         || { f(arr, k, &mut r); },
         || {},
     );
@@ -106,6 +107,40 @@ where P: Sync + Send + Copy + Sub<Output = V>,
     (r, mean)
 }
 
+fn check(inp: &[Point2d<f64>], out: &[Vec<usize>], k: usize) -> bool {
+    assert_eq!(out.len(), inp.len());
+
+    // Compute knn for inp
+    let mut knn = Vec::with_capacity(inp.len());
+    for (i, p) in inp.iter().enumerate() {
+        let mut distances = Vec::with_capacity(inp.len());
+        for (j, q) in inp.iter().enumerate() {
+            if i != j {
+                let dist = (*p - *q).length();
+                distances.push((dist, j));
+            }
+        }
+        // Sort distances
+        distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        // Pick the k nearest neighbors
+        let knn_p: Vec<usize> = distances.iter().take(k).map(|&(_, idx)| idx).collect();
+        knn.push(knn_p);
+    }
+
+    // Compare knn with out
+    let mut diff_count = 0usize;
+    for i in 0..inp.len() {
+        let knn_indices = &knn[i];
+        let out_indices = &out[i];
+        for j in 0..k {
+            if knn_indices[j] != out_indices[j] {
+                diff_count += 1;
+            }
+        }
+    }
+
+    diff_count == 0
+}
 
 fn main() {
     init!();
@@ -123,8 +158,29 @@ fn main() {
 
     if dimension == 2 {
         let points: Vec<Point2d<f64>> = read_points2d_from_file(&ifname);
-        let (r, d) = run::<Point2d<f64>, Vector2d<f64>, f64>
+
+        // print points size
+        println!("points size {:?}", points.len());
+
+        let (r, d) = run
                                               (args.algorithm, args.rounds, &points, k);
+
+        // println!("Results:");
+
+        // // print results size
+        // println!("{:?}", r.len());
+
+        // // print first 10 results
+        // for i in 0..10 {
+        //     println!("{:?}", r[i][0]);
+        // }
+
+        // check the results
+        if args.check {
+            let res = check(&points, &r, k);
+            println!("Result is {}", res);
+        }
+
         // convert r to list of strings
         let r: Vec<String> = r.iter().map(|x| x.iter().map(|y| y.to_string()).collect()).collect();
         if !ofname.is_empty() {
@@ -132,18 +188,8 @@ fn main() {
         }
 
         // print the runtime
-        println!("{:?}", d);
+        println!("Runtime {:?}", d);
     } else if dimension == 3 {
-        let points: Vec<Point3d<f64>> = read_points3d_from_file(&ifname);
-        let (r, d) = run::<Point3d<f64>, Vector3d<f64>, f64>
-                                              (args.algorithm, args.rounds, &points, k);
-        // convert r to list of strings
-        let r: Vec<String> = r.iter().map(|x| x.iter().map(|y| y.to_string()).collect()).collect();
-        if !ofname.is_empty() {
-            write_slice_to_file_seq(&r, &ofname);
-        }
-
-        // print the runtime
-        println!("{:?}", d);
+        panic!("3D points are not supported yet");
     }
 }

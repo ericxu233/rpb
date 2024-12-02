@@ -3,14 +3,12 @@ use num_traits::Float;   // For float traits
 use rayon::{prelude::*, vec};
 use std::ops::Sub;
 use crate::DefInt;
+use crate::common::geometry::*;
 
 // Declare `trait.rs` directly in main.rs
 use crate::common::traits::Length;
 
-pub fn ann<const MAXK: usize, P, V, F>(inp: &[P], k: usize, res: &mut Vec<Vec<usize>>)
-where P: Sync + Send + Copy + Sub<Output = V>,
-      V: Length<F>,
-      F: Float
+pub fn ann(inp: &[Point2d<f64>], k: usize, res: &mut Vec<Vec<usize>>)
 {
     // does not support for k > 1
     if k > 1 {
