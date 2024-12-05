@@ -1,11 +1,10 @@
 use num_traits::Float;
 use rayon::prelude::*;
 use std::sync::{Arc, Weak, Mutex};
-use crate::common::geometry::{Point2d, Point3d};
-use crate::common::traits::Length;
-use std::ops::Sub;
+use crate::common::geometry::Point2d;
 
 impl Point2d<f64> {
+    // Finds the min x and y values of two points
     fn minv(&self, other: &Self) -> Self {
         Point2d {
             x: self.x.min(other.x),
@@ -13,6 +12,7 @@ impl Point2d<f64> {
         }
     }
 
+    // Finds the max x and y values of two points
     fn maxv(&self, other: &Self) -> Self {
         Point2d {
             x: self.x.max(other.x),
@@ -20,6 +20,7 @@ impl Point2d<f64> {
         }
     }
 
+    // Finds the center x and y values of two points
     fn centerv(&self, other: &Self) -> Self {
         Point2d {
             x: (self.x + other.x) / 2.0,
@@ -27,20 +28,11 @@ impl Point2d<f64> {
         }
     }
 
-    fn get_diameter(&self, other: &Self) -> f64 {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        (dx * dx + dy * dy).sqrt()
-    }
-
     fn get_max_dim(&self, other: &Self) -> f64 {
         (self.x - other.x).abs().max((self.y - other.y).abs())
     }
 
-    fn is_equal(&self, other: &Self) -> bool {
-        self.x == other.x && self.y == other.y
-    }
-
+    // Find the center value and dimension, but it picks x/y that has larger difference
     fn get_split_point(&self, other: &Self) -> (f64, usize) {
         let diff_x = (self.x - other.x).abs();
         let diff_y = (self.y - other.y).abs();
@@ -59,7 +51,7 @@ impl Point2d<f64> {
         }
     }
 
-    fn get_distance(&self, other: &Self) -> f64 {
+    fn get_distance(&self, other: &Self) -> f64 { // same as get_diameter from pbbs
         let dx = self.x - other.x;
         let dy = self.y - other.y;
         (dx * dx + dy * dy).sqrt()
@@ -85,10 +77,10 @@ pub struct Node  {
 impl Node {
     // Create a new leaf node
     pub fn new_leaf(p: &[(Point2d<f64>, usize)], idty: usize) -> Arc<Self> {
-        let bbox = get_box(&p.iter().map(|(pt, _)| pt.clone()).collect::<Vec<_>>());
+        let bbox = get_box(&p.iter().map(|(pt, _)| pt).collect::<Vec<_>>());
         Arc::new(Node {
             n: 1,
-            diameter: bbox.0.get_diameter(&bbox.1),
+            diameter: bbox.0.get_distance(&bbox.1),
             max_dim: bbox.0.get_max_dim(&bbox.1),
             id: idty,
             parent: Mutex::new(Weak::new()),
@@ -107,7 +99,7 @@ impl Node {
         let bbox = (l.b.0.minv(&r.b.0), l.b.1.maxv(&r.b.1));
         let new_node = Arc::new(Node {
             n,
-            diameter: bbox.0.get_diameter(&bbox.1),
+            diameter: bbox.0.get_distance(&bbox.1),
             max_dim: bbox.0.get_max_dim(&bbox.1),
             id: idty,
             parent: Mutex::new(Weak::new()),
@@ -139,25 +131,24 @@ impl Node {
     }
 }
 
-pub fn get_box (v: &[Point2d<f64>]) -> (Point2d<f64>, Point2d<f64>) {
+pub fn get_box(v: &[&Point2d<f64>]) -> (Point2d<f64>, Point2d<f64>) {
     let n = v.len();
-    
+
     if n == 0 {
         panic!("Input vector cannot be empty");
     }
 
     let (min_point, max_point) = v
-        .par_iter() // Parallel iteration over the vector
+        .par_iter()
         .fold(
-            || (v[0].clone(), v[0].clone()), // Initial accumulator is a tuple of the first element
+            || (v[0].clone(), v[0].clone()),
             |acc, curr_pnt| {
-                (acc.0.minv(curr_pnt), acc.1.maxv(curr_pnt)) // Compute the min and max
+                (acc.0.minv(*curr_pnt), acc.1.maxv(*curr_pnt))
             },
-        ) // Perform the reduction
+        )
         .reduce(
-            || (v[0].clone(), v[0].clone()), // Identity element for the final reduction
+            || (v[0].clone(), v[0].clone()),
             |(min1, max1), (min2, max2)| {
-                // Combine the min and max values from different threads
                 (min1.minv(&min2), max1.maxv(&max2))
             },
         );
@@ -165,12 +156,13 @@ pub fn get_box (v: &[Point2d<f64>]) -> (Point2d<f64>, Point2d<f64>) {
     (min_point, max_point)
 }
 
+
 pub fn well_separated (a: &Arc<Node>, b: &Arc<Node>, s: f64) -> bool {
     // Diameter of the smallest sphere that can capture each box
     let diameter = Float::max(a.diameter, b.diameter);
 
     // Distance between the centers of the two boxes
-    let d = a.center.get_diameter(&b.center);
+    let d = a.center.get_distance(&b.center);
 
     // Check if the distance between the two balls is larger than 0.5 * s * diameter
     d - diameter >= 0.5 * s * diameter
@@ -241,14 +233,18 @@ pub fn build_recursive(
         return Node::new_leaf(points, id_offset);
     }
 
-    let bbox = get_box(&points.iter().map(|(pt, _)| pt.clone()).collect::<Vec<_>>());
+    let bbox = get_box(&points.iter().map(|(pt, _)| pt).collect::<Vec<_>>());
+
+    // Splitting depends on dimension that gives larger difference between the bounding boxes 
     let (split_point, d) = bbox.0.get_split_point(&bbox.1);
 
+    // Mark points as part of left or right subtree
     let flags_left: Vec<bool> = points
         .par_iter()
         .map(|(p, _)| p.get_dimension(d) < split_point)
         .collect();
 
+    // Actually split the points into left/right subtrees
     let split_index = flags_left.iter().filter(|&&x| x).count();
     let (tmp_left, tmp_right) = points.split_at(split_index);
 
@@ -257,6 +253,7 @@ pub fn build_recursive(
         || build_recursive(tmp_right, id_offset + split_index),
     );
 
+    // Create parent node after left and right children are made (recursive)
     Node::new_internal(left, right, (split_index + id_offset) * 2)
 }
 
@@ -287,7 +284,7 @@ fn update_nearest(
     query: &Point2d<f64>,
     neighbors: &mut Vec<usize>,
     distances: &mut Vec<f64>,
-    vertex: &(Point2d<f64>, usize), // Vertex contains the point and its original index
+    vertex: &(Point2d<f64>, usize), // Vertex contains the point and its original index in input vector
     k: usize,
 ) {
     let dist = query.get_distance(&vertex.0); // Calculate distance to the candidate point
@@ -318,7 +315,9 @@ fn parallel_knn_search(
 
             for leaf in &leaves {
                 if let Some(vertex) = &leaf.vertex {
-                    update_nearest(&query, &mut neighbors, &mut distances, vertex, k);
+                    if vertex.1 != query_idx {
+                        update_nearest(&query, &mut neighbors, &mut distances, vertex, k);
+                    } 
                 }
             }
 
@@ -338,12 +337,12 @@ pub fn ann(inp: &[Point2d<f64>], k: usize, res: &mut Vec<Vec<usize>>) {
     // Build the tree
     let root = build_recursive(&indexed_points, 0);
 
-    // Compute well-separated realizations
+    // Compute well-separated realizations (part of tree-build process)
     wsr(&root, 2.1, k);
 
-    // Gather all leaf nodes
+    // Gather all leaf nodes (Points reside in leaf nodes only)
     let leaves = gather_leaves(&root);
 
-    // Perform parallel kNN search
+    // Perform parallel knn search
     *res = parallel_knn_search(leaves, indexed_points, k);
 }

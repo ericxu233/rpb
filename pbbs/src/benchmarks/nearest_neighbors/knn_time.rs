@@ -36,7 +36,7 @@ use clap::Parser;
 #[path ="../../common/mod.rs"] mod common;
 
 use misc::*;
-use knn::{naive};
+use knn::{naive, ck_tree};
 use io::{read_big_file_to_vec, write_slice_to_file_seq};
 use common::geometry_io::{read_points2d_from_file, read_points3d_from_file};
 use common::geometry::*;
@@ -78,7 +78,8 @@ struct Args {
 }
 
 define_algs!(
-    (NAIVE, "naive")
+    (NAIVE, "naive"),
+    (CKTREE, "cktree")
 );
 
 pub fn run(alg: Algs, rounds: usize, arr: &[Point2d<f64>], k: usize) -> (Vec<Vec<usize>>, Duration)
@@ -89,7 +90,8 @@ pub fn run(alg: Algs, rounds: usize, arr: &[Point2d<f64>], k: usize) -> (Vec<Vec
 
     // Wrap `ann` in a closure with specified generics
     let f = match alg {
-        Algs::NAIVE => {naive::ann}
+        Algs::NAIVE => {naive::ann},
+        Algs::CKTREE => {ck_tree::ann},
     };
 
     let mut r = vec![vec![0; k]; n];
@@ -123,7 +125,8 @@ fn check(inp: &[Point2d<f64>], out: &[Vec<usize>], k: usize) -> bool {
         // Sort distances
         distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         // Pick the k nearest neighbors
-        let knn_p: Vec<usize> = distances.iter().take(k).map(|&(_, idx)| idx).collect();
+        let mut knn_p: Vec<usize> = distances.iter().take(k).map(|&(_, idx)| idx).collect();
+        knn_p.reverse();
         knn.push(knn_p);
     }
 
@@ -164,16 +167,6 @@ fn main() {
 
         let (r, d) = run
                                               (args.algorithm, args.rounds, &points, k);
-
-        // println!("Results:");
-
-        // // print results size
-        // println!("{:?}", r.len());
-
-        // // print first 10 results
-        // for i in 0..10 {
-        //     println!("{:?}", r[i][0]);
-        // }
 
         // check the results
         if args.check {
