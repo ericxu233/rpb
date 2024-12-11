@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 #[path ="../../common/graph_io.rs"] mod graph_io;
 
 use misc::*;
-use common::graph::Graph;
+use graph::Graph;
 use graph_io::read_graph_from_file;
 use io::write_slice_to_file_seq;
 
