@@ -104,3 +104,9 @@ test    = false
 name    = "knn"
 path    = "src/benchmarks/nearest_neighbors/knn_time.rs"
 test    = false
+
+# BreadthFirstSearch
+[[bin]]
+name    = "bfs"
+path    = "src/benchmarks/bfs/bfs_time.rs"
+test    = false
