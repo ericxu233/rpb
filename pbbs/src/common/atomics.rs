@@ -31,7 +31,7 @@ macro_rules! cast {
     ($a: expr, $o: expr, $n: expr, $t: ty) => {
         ($a as *mut $t, *($o as *const $t), *($n as *const $t))
     };
-}
+} 
 
 #[inline(always)]
 pub fn atomic_cas<T>(a: &mut T, old: T, new: T) -> bool {
