@@ -21,7 +21,7 @@ use io::write_slice_to_file_seq;
 #[clap(version, about, long_about = None)]
 struct Args {
     /// the algorithm to use
-    #[clap(short, long, value_parser, default_value_t = Algs::NAIVE)]
+    #[clap(short, long, value_parser, default_value_t = Algs::NDBFS)]
     algorithm: Algs,
 
     /// the output filename
@@ -50,7 +50,7 @@ struct Args {
 }
 
 define_algs!(
-    (NAIVE, "naive")
+    (NDBFS, "ndbfs")
 );
 
 pub fn run(
@@ -65,7 +65,7 @@ pub fn run(
     let parents_ptr = &parents as *const Vec<i32> as usize;
 
     let f = match alg {
-        Algs::NAIVE => {bfs::nd_bfs::bfs}
+        Algs::NDBFS => {bfs::nd_bfs::bfs}
     };
 
     let mean = time_loop(
