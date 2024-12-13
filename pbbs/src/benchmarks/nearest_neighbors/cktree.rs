@@ -59,14 +59,14 @@ impl Point2d<f64> {
 }
 
 
-pub struct Node  {
-    pub n: usize,           //size      
-    pub diameter: f64,             
-    pub max_dim: f64,             
-    pub id: usize,                 
+pub struct Node {
+    pub n: usize,
+    pub diameter: f64,
+    pub max_dim: f64,
+    pub id: usize,
     pub parent: Mutex<Weak<Node>>,
-    pub left: Mutex<Option<Arc<Node>>>,
-    pub right: Mutex<Option<Arc<Node>>>,
+    pub left: Option<Arc<Node>>, 
+    pub right: Option<Arc<Node>>, 
     pub vertex: Option<(Point2d<f64>, usize)>,
     pub center: Point2d<f64>,
     pub b: (Point2d<f64>, Point2d<f64>),
@@ -74,24 +74,26 @@ pub struct Node  {
 }
 
 
+
 impl Node {
     // Create a new leaf node
     pub fn new_leaf(p: &[(Point2d<f64>, usize)], idty: usize) -> Arc<Self> {
-        let bbox = get_box(&p.iter().map(|(pt, _)| pt).collect::<Vec<_>>());
+        let point = &p[0].0; // Access the single Point2d<f64> directly
         Arc::new(Node {
             n: 1,
-            diameter: bbox.0.get_distance(&bbox.1),
-            max_dim: bbox.0.get_max_dim(&bbox.1),
+            diameter: 0.0, // No diameter for a single point
+            max_dim: 0.0, // No dimension difference for a single point
             id: idty,
             parent: Mutex::new(Weak::new()),
-            left: Mutex::new(None),
-            right: Mutex::new(None),
-            vertex: Some(p[0].clone()),
-            center: bbox.0.centerv(&bbox.1),
-            b: bbox,
+            left: None,
+            right: None,
+            vertex: Some(p[0].clone()), 
+            center: point.clone(), // Center is the point itself
+            b: (point.clone(), point.clone()), // Bounding box is the single point
             interactions: Mutex::new(Vec::new()),
         })
     }
+    
 
     // Create a new internal node
     pub fn new_internal(l: Arc<Node>, r: Arc<Node>, idty: usize) -> Arc<Node> {
@@ -103,8 +105,8 @@ impl Node {
             max_dim: bbox.0.get_max_dim(&bbox.1),
             id: idty,
             parent: Mutex::new(Weak::new()),
-            left: Mutex::new(Some(l.clone())),
-            right: Mutex::new(Some(r.clone())),
+            left: Some(l.clone()),
+            right: Some(r.clone()),
             vertex: None,
             center: bbox.0.centerv(&bbox.1),
             b: bbox,
@@ -127,7 +129,7 @@ impl Node {
     }
 
     pub fn is_leaf(&self) -> bool {
-        self.left.lock().unwrap().is_none()
+        self.left.is_none()
     }
 }
 
@@ -156,7 +158,6 @@ pub fn get_box(v: &[&Point2d<f64>]) -> (Point2d<f64>, Point2d<f64>) {
     (min_point, max_point)
 }
 
-
 pub fn well_separated (a: &Arc<Node>, b: &Arc<Node>, s: f64) -> bool {
     // Diameter of the smallest sphere that can capture each box
     let diameter = Float::max(a.diameter, b.diameter);
@@ -169,7 +170,7 @@ pub fn well_separated (a: &Arc<Node>, b: &Arc<Node>, s: f64) -> bool {
 }
 
 
-pub fn wsr_children (l: &Arc<Node>, r: &Arc<Node>, s: f64, k: usize) {
+pub fn wsr_children(l: &Arc<Node>, r: &Arc<Node>, s: f64, k: usize) {
     if well_separated(l, r, s) {
         if l.n <= k {
             l.add_interaction(r);
@@ -178,49 +179,47 @@ pub fn wsr_children (l: &Arc<Node>, r: &Arc<Node>, s: f64, k: usize) {
             r.add_interaction(l);
         }
     } else {
-        // If not well-separated, recursively check children
-        let l_left = l.left.lock().unwrap().clone();
-        let l_right = l.right.lock().unwrap().clone();
-        let r_left = r.left.lock().unwrap().clone();
-        let r_right = r.right.lock().unwrap().clone();
-
         if let (Some(l_left), Some(l_right), Some(r_left), Some(r_right)) =
-            (l_left, l_right, r_left, r_right)
+            (&l.left, &l.right, &r.left, &r.right)
         {
             if l.max_dim > r.max_dim {
-                wsr_children(r, &l_left, s, k);
-                wsr_children(r, &l_right, s, k);
+                rayon::join(
+                    || wsr_children(r, l_left, s, k),
+                    || wsr_children(r, l_right, s, k),
+                );
             } else {
-                wsr_children(l, &r_left, s, k);
-                wsr_children(l, &r_right, s, k);
+                rayon::join(
+                    || wsr_children(l, r_left, s, k),
+                    || wsr_children(l, r_right, s, k),
+                );
             }
         }
     }
 }
 
-pub fn wsr (t: &Arc<Node>, s: f64, k: usize) {
+
+pub fn wsr(t: &Arc<Node>, s: f64, k: usize) {
     if t.is_leaf() {
         return;
     }
 
-    let left = t.left.lock().unwrap().clone();
-    let right = t.right.lock().unwrap().clone();
+    if let (Some(ref left), Some(ref right)) = (&t.left, &t.right) {
+        // Process well-separated children
+        wsr_children(left, right, s, k);
 
-    if let (Some(left), Some(right)) = (left, right) {
-        wsr_children(&left, &right, s, k);
-
-        let n = t.n;
-        if n > 100 {
+        // Recursively call `wsr` on children
+        if t.n > 1000 {
             rayon::join(
-                || wsr(&left, s, k),
-                || wsr(&right, s, k),
+                || wsr(left, s, k),
+                || wsr(right, s, k),
             );
         } else {
-            wsr(&left, s, k);
-            wsr(&right, s, k);
+            wsr(left, s, k);
+            wsr(right, s, k);
         }
     }
 }
+
 
 pub fn build_recursive(
     points: &[(Point2d<f64>, usize)],
@@ -233,43 +232,51 @@ pub fn build_recursive(
         return Node::new_leaf(points, id_offset);
     }
 
-    let bbox = get_box(&points.iter().map(|(pt, _)| pt).collect::<Vec<_>>());
+    // Compute the bounding box directly
+    let bbox = points.iter().fold(
+        (points[0].0.clone(), points[0].0.clone()),
+        |(min, max), (pt, _)| (min.minv(pt), max.maxv(pt)),
+    );
 
-    // Splitting depends on dimension that gives larger difference between the bounding boxes 
+    // Splitting depends on dimension that gives larger difference between the bounding boxes
     let (split_point, d) = bbox.0.get_split_point(&bbox.1);
 
-    // Mark points as part of left or right subtree
+    // Parallel computation of the split flags
     let flags_left: Vec<bool> = points
         .par_iter()
         .map(|(p, _)| p.get_dimension(d) < split_point)
         .collect();
 
-    // Actually split the points into left/right subtrees
+    // Count the number of points in the left subtree
     let split_index = flags_left.iter().filter(|&&x| x).count();
+
+    // Split the points into left and right subtrees
     let (tmp_left, tmp_right) = points.split_at(split_index);
 
-    let (left, right): (Arc<Node>, Arc<Node>) = rayon::join(
-        || build_recursive(tmp_left, id_offset),
-        || build_recursive(tmp_right, id_offset + split_index),
-    );
-
-    // Create parent node after left and right children are made (recursive)
-    Node::new_internal(left, right, (split_index + id_offset) * 2)
+    if points.len() > 1000 {
+        // Parallel construction for large input
+        let (left, right): (Arc<Node>, Arc<Node>) = rayon::join(
+            || build_recursive(tmp_left, id_offset),
+            || build_recursive(tmp_right, id_offset + split_index),
+        );
+        Node::new_internal(left, right, (split_index + id_offset) * 2)
+    } else {
+        // Sequential construction for small input
+        let left = build_recursive(tmp_left, id_offset);
+        let right = build_recursive(tmp_right, id_offset + split_index);
+        Node::new_internal(left, right, (split_index + id_offset) * 2)
+    }
 }
 
 fn collect_leaf_nodes(node: &Arc<Node>, leaves: &mut Vec<Arc<Node>>) {
     if node.is_leaf() {
         leaves.push(node.clone());
     } else {
-        if let Ok(left) = node.left.lock() {
-            if let Some(left_node) = &*left {
-                collect_leaf_nodes(left_node, leaves);
-            }
+        if let Some(ref left_node) = node.left {
+            collect_leaf_nodes(left_node, leaves);
         }
-        if let Ok(right) = node.right.lock() {
-            if let Some(right_node) = &*right {
-                collect_leaf_nodes(right_node, leaves);
-            }
+        if let Some(ref right_node) = node.right {
+            collect_leaf_nodes(right_node, leaves);
         }
     }
 }
