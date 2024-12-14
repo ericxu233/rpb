@@ -1,0 +1,1720 @@
+APractical Automatic Polyhedral Parallelizer and
+ Locality Optimizer
+ Uday Bondhugula1
+ Albert Hartono1
+ 1Dept. of Computer Science and Engineering
+ The Ohio State University
+ {bondhugu,hartonoa,saday}@cse.ohio-state.edu
+ Abstract
+ Wepresent the design and implementation of an automatic polyhe
+dral source-to-source transformation framework that can optimize
+ regular programs (sequences of possibly imperfectly nested loops)
+ for parallelism and locality simultaneously. Through this work, we
+ showthe practicality of analytical model-driven automatic transfor
+mation in the polyhedral model.Unlike previous polyhedral frame
+works, our approach is an end-to-end fully automatic one driven by
+ an integer linear optimization framework that takes an explicit view
+ of finding good ways of tiling for parallelism and locality using
+ affine transformations. The framework has been implemented into
+ a tool to automatically generate OpenMP parallel code from C pro
+gram sections. Experimental results from the tool show very high
+ performance for local and parallel execution on multi-cores, when
+ compared with state-of-the-art compiler frameworks from the re
+search community as well as the best native production compilers.
+ The system also enables the easy use of powerful empirical/itera
+tive optimization for general arbitrarily nested loop sequences.
+ Categories and Subject Descriptors D.3.4 [Programming Lan
+guages]: Processors—Compilers, Optimization, Code generation
+ General Terms Algorithms, Design, Experimentation, Perfor
+mance
+ Keywords Automaticparallelization, Locality optimization, Poly
+hedral model, Loop transformations, Affine transformations, Tiling
+ 1. Introduction and Motivation
+ Current trends in microarchitecture are increasingly towards larger
+ number of processing elements on a single chip. This has made
+ parallelism and multi-core processors mainstream. The difficulty
+ of programming these architectures to effectively tap the potential
+ of multiple on-chip processing units is a significant challenge.
+ Among several approaches to addressing this issue, one that is
+ very promising but simultaneously very challenging is automatic
+ parallelization. This requires no effort on part of the programmer
+ in the process of parallelization and optimization and is therefore
+ very attractive.
+ Permission to make digital or hard copies of all or part of this work for personal or
+ classroom use is granted without fee provided that copies are not made or distributed
+ for profit or commercial advantage and that copies bear this notice and the full citation
+ on the first page. To copy otherwise, to republish, to post on servers or to redistribute
+ to lists, requires prior specific permission and/or a fee.
+ PLDI’08, June 7–13, 2008, Tucson, Arizona, USA.
+ Copyright c
+ ⃝2008ACM978-1-59593-860-2/08/06...$5.00
+ J. Ramanujam2
+ P. Sadayappan1
+ 2Dept. of Electrical & Computer Engineering & CCT
+ Louisiana State University
+ jxr@ece.lsu.edu
+ Many compute-intensive applications often spend most of their
+ execution time in nested loops. This is particularly common in sci
+entific and engineering applications. The polyhedral model pro
+vides a powerful abstraction to reason about transformations on
+ such loop nests by viewing a dynamic instance (iteration) of each
+ statement as an integer point in a well-defined space called the
+ statement’s polyhedron. With such a representation for each state
+ment and a precise characterization of inter or intra-statement de
+pendences, it is possible to reason about the correctness of complex
+ loop transformations in a completely mathematical setting relying
+ on machinery from linear algebra and linear programming. The
+ transformations finally reflect in the generated code as reordered
+ execution with improved cache locality and/or loops that have been
+ parallelized. The polyhedral model is applicable to loop nests in
+ which the data access functions and loop bounds are affine combi
+nations (linear combination with a constant) of the enclosing loop
+ variables and parameters. While a precise characterization of data
+ dependences is feasible for programs with static control structure
+ and affine references/loop-bounds, codes with non-affine array ac
+cess functions or code with dynamic control can also be handled,
+ but only with conservative assumptions on some dependences.
+ The task of program optimization (often for parallelism and lo
+cality) in the polyhedral model may be viewed in terms of three
+ phases: (1) static dependence analysis of the input program, (2)
+ transformations in the polyhedral abstraction, and (3) generation of
+ code for the transformed program. Significant advances were made
+ in the past decade on dependence analysis [19, 18, 46] and code
+ generation [31, 25] in the polyhedral model, but the approaches suf
+fered from scalability challenges. Recent advances in dependence
+ analysis and more importantly in code generation [47, 6, 55, 54]
+ have solved many of these problems resulting in the polyhedral
+ techniques being applied to code representative of real applications
+ like the spec2000fp benchmarks [14, 22]. These advances have also
+ made the polyhedral model practical in production compiler con
+texts [43] as a flexible and powerful representation to compose and
+ apply transformations. The key missing step has been the demon
+stration of a scalable and practical approach for automatic trans
+formation for parallelization and locality. Our work addresses this
+ by developing a compiler, based on the theoretical framework we
+ previously proposed [9], to enable end-to-end fully automatic par
+allelization and locality optimization.
+ Tiling [28, 58, 61] is a key transformation in optimizing for par
+allelism and data locality. There has been a considerable amount
+ of research into these two transformations. Tiling has been stud
+ied from two perspectives– data locality optimization and paral
+lelization. Tiling for locality requires grouping points in an iter
+ation space into smaller blocks (tiles) allowing reuse in multiple
+ directions when the block fits in a faster memory (registers, L1, or
+ L2 cache). Tiling for coarse-grained parallelism involves partition
+for (i=0; i<N;i++)
+ for (j=0; j<N;j++)
+ S1:A[i,j] =A[i,j]+u1[i]∗v1[j] +u2[i]∗v2[j];
+ for (k=0; k<N;k++)
+ for (l=0; l<N;l++)
+ S2: x[k] =x[k]+A[l,k]∗y[l];
+ Original code
+ 0
+ B @
+ 1 0 0 0
+ 0 1 0 0
+ −1 0 1 −1
+ 0 −1 1 −1
+ 1
+ C A
+ 0
+ B @
+ i
+ j
+ N
+ 1
+ 1
+ C A≥⃗0
+ DomainofS1
+ S1
+ S2
+ [...]
+ [...]
+ Datadependencegraph
+ 0
+ B B B B B @
+ 1 0 0 0 0 0
+ 0 −1 0 0 1 −1
+ 0 0 1 0 0 0
+ 0 0 0 −1 1 −1
+ 1 0 0 −1 0 0
+ 0 1 −1 0 0 0
+ 1
+ C C C C C A
+ 2
+ 6 6 6 6 6 4
+ i
+ j
+ k
+ l
+ N
+ 1
+ 3
+ 7 7 7 7 7 5
+ ≥0
+ ≥0
+ ≥0
+ ≥0
+ =0
+ =0
+ DependencepolyhedronforS1→S2edge
+ S1 S2
+ i j const k l const
+ c1 0 1 0 1 0 0 parallel
+ c2 1 0 0 0 1 0 fwddep
+ c3 0 0 0 0 0 1 scalar
+ Statement-wisetransformation
+ for (c1=0; c1<N;c1++)
+ for (c2=0; c2<N;c2++)
+ A[c2,c1] =A[c2,c1]+u1[c2]∗v1[c1]+u2[c2]∗v2[c1];
+ x[c1] =x[c1]+A[c2,c1]∗y[c2];
+ Transformedcode
+ Figure1. Polyhedralrepresentation
+ ingtheiterationspaceintotilesthatmaybeconcurrentlyexecuted
+ ondifferentprocessorswithareducedfrequencyandvolumeof
+ inter-processorcommunication:atileisatomicallyexecutedona
+ processorwithcommunicationrequiredonlybeforeandafterexe
+cution.Oneofthekeyaspectsofourtransformationframeworkis
+ tofindgoodwaysofperformingtiling.
+ Existingautomatictransformationframeworks[37,36,35,24]
+ haveoneormoredrawbacksorrestrictionsthatlimittheireffective
+ness.Acommonsignificantproblemisthelackofarealisticcost
+ functiontochooseamongthelargespaceoflegal transformations
+ thataresuitableforcoarse-grainedparallelexecution,asisusedin
+ practicewithmanuallydeveloped/optimizedparallelapplications.
+ Mostpreviouslyproposedapproachesalsodonotconsiderlocality
+ andparallelismtogether.Comprehensiveperformanceevaluation
+ onparallel targetsusingarangeof test caseshasnotbeendone
+ usingapowerfulandgeneralmodellikethepolyhedralmodel.
+ Thispaperpresentstheend-to-enddesignandimplementation
+ ofPLuTo[1],aparallelizationandlocalityoptimizationtool.Find
+inggoodwaystotileforparallelismandlocalitydirectlythrough
+ anaffine transformation framework is thecentral idea.Our ap
+proach is thusadeparture fromscheduling-basedapproaches in
+ thisfield [20, 21, 17, 24, 15] aswell aspartitioning-basedap
+proaches[37,36,35] (duetoincorporationofmoreconcreteop
+timizationcriteria), however, isbuilt on the samemathematical
+ foundationsandmachinery.Weshowhowtiledcodegenerationfor
+ statementdomainsofarbitrarydimensionalitiesunder statement
+wise affine transformations is done for local and sharedmem
+oryparallelexecution.Weevaluatetheperformanceoftheimple
+mentedsystemonamulticoreprocessorusinganumberofappli
+cationkernelsthatarenon-trivialforanyexistingauto-parallelizer.
+ Model-drivenempiricaloptimizationandautomatictuningap
+proaches (e.g.,ATLAS)havebeenshowntobeveryeffective in
+ optimizingsingle-processorexecutionforsomeregularkernelslike
+ matrix-matrixmultiplication[56,63].Thereisconsiderableinter
+est indevelopingeffectiveempirical tuningapproaches forarbi
+traryinputkernels.Ourframeworkcanenablesuchmodel-driven
+ orguidedempirical search tobeapplied toarbitraryaffinepro
+grams, in thecontext of bothsequential andparallel execution.
+ Also,sinceourtransformationsystemoperatesentirelyinthepoly
+hedralabstraction, it isnot just limitedtoCorFortrancode,but
+ couldacceptanyhigh-level languagefromwhichpolyhedraldo
+mainscanbeextractedandanalyzed.
+ Therestofthispaperisorganizedasfollows.Section3provides
+ anoverviewofour theoretical frameworkforautomatictransfor
+mationthatweproposedin[9].Section4andSection5discuss
+ someconsiderationsinthedesignandtechniquesforgenerationof
+ efficient tiledsharedmemoryparallel codefromtransformations
+ found.Section6describestheimplementedsystem.Section7pro
+videsexperimental results.Section8discusses relatedworkand
+ conclusionsarepresentedinSection9.
+ 2. BackgroundandNotation
+ Thissectionprovidesbackgroundonthepolyhedralmodel.Allrow
+ vectorsaretypesetinbold.
+ 2.1 ThePolyhedralmodel
+ DEFINITION1 (AffineHyperplane).ThesetXofallvectorsx∈
+ Znsuchthath.⃗x=k, fork∈Z,isanaffinehyperplane.
+ Inotherwords,ahyperplaneisahigherdimensionalanalogof
+ a(2-d)planeinthree-dimensionalspace.Thesetofparallelhyper
+planeinstancescorrespondingtodifferentvaluesofkischaracter
+izedbythevector⃗hwhichisnormaltothehyperplane.Twovectors
+ ⃗ x1and⃗ x2lieinthesamehyperplaneifh.⃗ x1=h.⃗ x2.
+ DEFINITION2 (Polyhedron).Thesetofallvectors⃗x∈Znsuch
+ thatA⃗x+⃗ b≥0,whereAisanintegermatrix,definesa(convex)
+ integerpolyhedron.Apolytopeisaboundedpolyhedron.
+ Polyhedralrepresentationofprograms. Givenaprogram,each
+ dynamicinstanceofastatement,S,isdefinedbyitsiterationvector
+ ⃗iwhichcontainsvalues for the indicesof the loopssurrounding
+ S, fromoutermost to innermost.Whenever the loopboundsare
+ linearcombinationsofouterloopindicesandprogramparameters
+ (typically,symbolicconstantsrepresentingproblemsizes), theset
+ ofiterationvectorsbelongingtoastatementdefineapolytope.Let
+ DSrepresent thepolytopeanditsdimensionalitybemS.Let⃗ pbe
+ thevectorofprogramparameters.
+ Polyhedral dependences. Our dependencemodel is of exact
+ affinedependencesandsameastheoneusedin [20,36,14,45].
+ Dependences are determinedprecisely throughdataflowanaly
+sis [19], butweconsider all dependences includinganti (write
+after-read), output (write-after-write) and input (read-after-read)
+ dependences,i.e.,inputcodedoesnotrequireconversiontosingle
+assignmentform.TheDataDependenceGraph(DDG)isadirected
+ multi-graphwitheachvertexrepresentingastatement,andanedge,
+ e∈E,fromnodeSi toSj representingapolyhedraldependence
+ fromadynamic instanceofSi tooneofSj: it ischaracterized
+ byapolyhedron,Pe,calledthedependencepolyhedronthatcap
+tures theexact dependence informationcorresponding toe.The
+ dependencepolyhedronisinthesumofthedimensionalitiesofthe
+ sourceandtargetstatement’spolyhedra(withdimensionsforpro
+gramparametersaswell).Let⃗srepresentthesourceiterationand⃗ t
+ bethetargetiterationpertainingtoadependenceedgee.Itispossi
+bletoexpressthesourceiterationasanaffinefunctionofthetarget
+iteration, i.e., to find the last conflicting access. This affine func
+tion is also known as the h-transformation, and will be represented
+ by he for a dependence edge e. Hence, ⃗s = he(⃗ t). The equalities
+ corresponding to the h-transformation are a part of the dependence
+ polyhedron and can be used to reduce its dimensionality. Figure 1
+ shows the polyhedral representation of a simple code.
+ Let S1, S2, ..., Sn be the statements of the program. A one
+dimensional affine transform for statement Sk is defined by:
+ φsk
+ (⃗i) = 
+h
+ c1 ... cmSk
+ i` ⃗i 
+´+c0, ci ∈ Z (1)
+ φSk 
+canalso becalled an affine hyperplane, or a scattering function
+ when dealing with the code generator. A multi-dimensional affine
+ transformation for a statement is represented by a matrix with each
+ row being an affine hyperplane.
+ DEFINITION 3 (Dependence satisfaction). An affine dependence
+ with polyhedron Pe is satisfied at a level l iff the following condi
+tion is satisfied:
+ ∀k(1 ≤ k ≤l−1): φk
+ sj 
+` ⃗ t´−φk
+ si 
+(⃗s) ≥ 0, ⟨⃗s,⃗ t⟩ ∈ Pe
+ and φl
+ sj 
+` ⃗ t´ − φl
+ si 
+(⃗s) ≥ 1, ⟨⃗s,⃗ t⟩ ∈ Pe
+ 3. Overview of Automatic Transformation
+ Approach
+ In this section, we give an overview of our theoretical framework
+ for automatic transformation. Complete details on the theory are
+ available in another report [8].
+ 3.1 Legality of tiling multiple domains with affine
+ dependences
+ LEMMA 1. Let φsi 
+be a one-dimensional affine transform for
+ statement Si. For {φs1
+ , φs2
+ , ..., φsk
+ }, to be a legal (statement
+wise) tiling hyperplane, the following should hold for each edge
+ e ∈E:
+ φsj 
+` ⃗ t´ − φsi 
+(⃗s) ≥ 0, ⟨⃗s,⃗ t⟩ ∈ Pe
+ (2)
+ The above is a generalization of the classic condition proposed by
+ Irigoin and Triolet [28] (as hT.R ≥ 0) for the legality of tiling
+ a single domain. The tiling of a statement’s iteration space by a
+ set of hyperplanes is said to be legal if each tile can be executed
+ atomically and a valid total ordering of the tiles can be constructed.
+ This implies that there exist no two tiles such that they both depend
+ on each other. The above is a generalization to multiple iteration
+ domains with affine dependences and with possibly different di
+mensionalities coming from possibly imperfectly nested input.
+ Let {φ1
+ s1
+ , φ1
+ s2
+ , . . . , φ1
+ sk
+ }, {φ2
+ s1
+ , φ2
+ s2
+ , . . . , φ2
+ sk
+ } be two statement
+wise 1-d affine transforms that satisfy (2). Then, {φ1
+ s1
+ , φ1
+ s2
+ , ...,
+ φ1
+ sk
+ }, {φ2
+ s1
+ , φ2
+ s2
+ , . . . , φ2
+ sk
+ } represent rectangularly tilable loops in
+ the transformed space. A tile can be formed by aggregating a group
+ of hyperplane instances along φ1
+ si 
+and φ2
+ si
+ . Due to (2), if such a
+ tile is executed on a processor, communication would be needed
+ only before and after its execution. From the point of view of data
+ locality, if such a tile is executed with the associated data fitting in
+ a faster memory, reuse is exploited in multiple directions. Hence,
+ any φj
+ S1
+ ,φj
+ S2
+ ,...,φj
+ Sn 
+that is a solution to (2) represents a com
+mon dimension (for all statements) in the transformed space with
+ both inter and intra-statement affine dependences in the forward
+ direction along it.
+ Partial tiling at any depth. The legality condition as written in
+ (2) is imposed on all dependences. However, if it is imposed only
+ on dependences that have not been satisfied up to a certain depth,
+ the independent φ’s that satisfy the condition represent tiling hy
+perplanes at that depth, i.e., tiling at that level is legal.
+ 3.2 Cost function, bounding approach and minimization
+ Consider the following affine form δe:
+ δe(⃗s,⃗ t)
+ = φsj
+ (⃗ t) −φsi
+ (⃗s), ⟨⃗s,⃗ t⟩ ∈ Pe
+ (3)
+ The affine form δe(⃗s,⃗ t) is very significant. This function is the
+ number of hyperplanes the dependence e traverses along the hy
+perplane normal φ. If φ is used as a space loop to generate tiles
+ for parallelization, this function is a factor in the communication
+ volume. On the other hand, if φ is used as a sequential loop, it
+ gives us a measure of the reuse distance. An upper bound on this
+ function would mean that the number of hyperplanes that would be
+ communicated as a result of the dependence at the tile boundaries
+ would not exceed the bound, the same for cache misses at L1/L2
+ tile edges, or L1 cache loads for a register tile. Of particular interest
+ is, if this function can be reduced to a constant amount or zero (free
+ of a parametric component) by choosing a suitable direction for φ:
+ if this is possible, then that particular dependence leads to constant
+ boundary communication or no communication (respectively) for
+ this hyperplane.
+ An attempt to minimize the above cost function ends up in an
+ objective non-linear in loop variables and hyperplane coefficients.
+ For example, φ(⃗ t) − φ(⃗s) could be c1i + (c2 − c3)j, under 1 ≤
+ i ≤N,1≤j ≤N,i≤j.Suchaformresultswhenadependence
+ is not uniform or for an inter-statement dependence. The difficulty
+ can beovercomebyusingaboundingfunctionapproachthat allows
+ the application of Farkas Lemma [20, 51] and casting the objective
+ into an ILP formulation. Since the loop variables themselves can be
+ bounded by affine functions of the parameters, one can always find
+ an affine form in the program parameters, ⃗ p, that bounds δe(⃗s,⃗ t)
+ for every dependence edge e, i.e., there exists v(⃗ p) = u.⃗ p + w,
+ such that
+ i.e.,
+ φsj
+ (⃗ t) − φsi
+ (⃗s) ≤ v(⃗ p), ⟨⃗s,⃗ t⟩ ∈ Pe, ∀e ∈ E
+ v(⃗ p) − δe(⃗s,⃗ t) ≥ 0, ⟨⃗s,⃗ t⟩ ∈ Pe, ∀e ∈ E (4)
+ Suchaboundingfunction approach was first used by Feautrier [20],
+ but for a different purpose– to find minimum latency schedules.
+ Now, Farkas Lemma can be applied to (4).
+ me
+ X
+ v(⃗ p) − δe(⃗s,⃗ t) ≡ λe0 +
+ k=1
+ λekPk
+ e, λek ≥ 0
+ where Pk
+ e is a face of Pe. Coefficients of each of the iterators
+ in ⃗i and parameters in ⃗ p on the LHS and RHS can be gathered
+ and equated, to obtain linear equalities and inequalities entirely in
+ coefficients of the affine mappings for all statements, components
+ of row vector u, and w. The ILP system comprising the tiling
+ legality constraints from (2) and the bounding constraints can be
+ at once solved by finding a lexicographic minimal solution with ⃗u
+ and w in the leading position. Let u = (u1,u2,...uk).
+ minimize≺ {u1,u2,...,uk,w,...,c′
+ is,...}
+ (5)
+ Finding the lexicographic minimal solution is within the reach of
+ the Simplex algorithm and can behandledbytheParametric Integer
+ Programming (PIP) software [18]. Since the program parameters
+ are quite large, their coefficients are minimized with the highest
+ priority. The solution gives a hyperplane for each statement. Note
+ the trivial zero solution is avoided by making a practical choice that
+ is described in the next section.
+ Iteratively finding independent solutions. Solving the ILP for
+mulation in the previous section gives us a single solution to the
+ coefficients of the best mappings for each statement. We need at
+ least as many independent solutions (for a statement) as the dimen
+sionality of its domain. Hence, once a solution is found, we aug
+ment the ILP formulation with new constraints that make sure of
+pendence, we have the constraints:
+ linear independence with solutions already found. This is done by
+ constructing the orthogonal sub-space [40, 34] of the transforma
+tion rows found so far (HS) and forcing a non-zero component in
+ H⊥
+ S for the next solution.
+ H⊥
+ S = I −HT
+ S
+ “
+ HSHT
+ S
+ ”−1
+ HS
+ (6)
+ Linearly independent (statement-wise) hyperplanes are found
+ iteratively till all dependences are satisfied. Dependences from pre
+viously found hyperplanes are not removed as independent tiling
+ hyperplanes are found unless they have to be to allow the next band
+ of tiling hyperplanes to be found. Maximal sets of fully permutable
+ loops are found like in the case of [59, 16, 36], however, with a
+ optimization criterion (5) that goes beyond maximum degrees of
+ parallelism.
+ Outer space and inner time: communication and locality opti
+mization unified The best possible solution to (5) is with (u =
+ 0, w = 0), which is a hyperplane that has no dependence compo
+nents along its normal– this is a fully parallel loop requiring no
+ synchronization if at the outer level (outer parallel), or an inner
+ parallel one if some dependences were removed previously and so
+ a synchronization is required after the loop is executed in parallel.
+ Thus, in each of the steps that we find a new independent hyper
+plane, we end up first finding all synchronization-free hyperplanes
+ when they exist; these are followed by a set of hyperplanes requir
+ing constant boundary communication (u = 0;w > 0). In the
+ worst case, we have a hyperplane with u > 0,w ≥ 0 resulting
+ in long communication from non-constant dependences; such solu
+tions are found last. From the point of view of data locality, since
+ the samehyperplanes usedtoscanthetile space scan points in a tile,
+ cache misses at tile boundaries (that are equivalent to communica
+tion along processor tile boundaries) are minimized. By minimizing
+ φ(⃗ t) − φ(⃗s) as we find hyperplanes from outermost to innermost,
+ we push dependence satisfaction to inner loops, at the same time
+ ensuring that the new loops have non-negative dependence compo
+nents (to the extent possible) so that they can be tiled for locality
+ and pipelined parallelism can be extracted if (forward) space de
+pendences exist. If the outer loops are used as space (how many
+ ever desired, say k), and the rest are used as time, communication
+ in the processor space is minimal as the outer space loops are the
+ k best ones. Whenever the loops are tiled, they result in coarse
+grained parallelism as well as better reuse within a tile.
+ Fusion. Fusion across multiple iteration spaces that are weakly
+ connected, as in sequences of producer-consumer loops is also en
+abled. Since the hyperplanes do not include coefficients for pro
+gram parameters (1), a solution found corresponds to a fine-grained
+ interleaving of different statement instances at that level [8].
+ 4. Moredesign considerations
+ In this section, we discuss a few enhancements to the framework as
+ well as some practical choices for scalability.
+ 4.1 Handling input dependences
+ Input dependences need to be considered for optimization in many
+ cases as reuse can be exploited by minimizing them. Clearly, le
+gality (ordering between dependent RAR iterations) need not be
+ preserved. We thus do not add legality constraints (2) for such de
+pendences, but consider them for the bounding objective function
+ ( 4). Since input dependences can be allowed to have negative com
+ponents in the transformed space, they need to be bounded from
+ both above and below. For every, PR
+ e corresponding to a input de
+˛
+ ˛φsj 
+` ⃗ t´ − φsi 
+(⃗s)˛ ˛ ≤ v(⃗ p), ⟨⃗s,⃗ t⟩ ∈ PR
+ e
+ φsj 
+` ⃗ t´ − φsi 
+(⃗s) ≤ v(⃗ p), ⟨⃗s,⃗ t⟩ ∈ PR
+ e ,
+ i.e.,
+ and
+ φsi 
+(⃗s) − φsj 
+` ⃗ t´ ≤ v(⃗ p), ⟨⃗s,⃗ t⟩ ∈ PR
+ e
+ 4.2 Avoiding combinatorial explosion
+ There are twosituations when there is a possibility of combinatorial
+ explosion (with the number of statements) if reasonable choices are
+ not made.
+ 1. Avoiding the trivial zero vector solution to the hyperplanes
+ 2. Construction of linearly independent sub-space for each state
+ment’s transformation
+ Removing the trivial zero solution to (5) on a per-statement basis
+ leads to a non-convex space, and in this case a union of a large
+ number of convex spaces each of which has to be tried. Similarly,
+ while constructing a linearly independent sub-space for each state
+ment, there are several choices for each statement and the number
+ of choices to be exhaustively tried will be a product of all these [8].
+ The above difficulties can be solved at once by only looking for
+ non-negative transformation coefficients. Then, the zero solution
+ can be avoided with the constraint of P ci ≥ 1, 1 ≤ i ≤ mSk
+ ,
+ for each statement Sk. Doing so mainly excludes transformations
+ that include loop reversal, and in practice, we do not find this to
+ be a concern at all. The current implementation of Pluto [1] is with
+ this choice, and scales very well without loss of good transforma
+tions. Exploring all possible choices if one wishes is still possible
+ for around up to ten statements while keep the running time within
+ a few tens of seconds.
+ 5. Tiled code generation for arbitrarily-nested
+ loops under statement-wise transformations
+ In this section, we describe how tiled code is generated from trans
+formations found in the previous section. This is a key step in gen
+eration of high performance code.
+ Wefirstgive abrief description of the polyhedral code generator
+ CLooG [13, 6]. CLooG can scan a union of polyhedra, and option
+ally, under a new global lexicographic ordering specified as through
+ scattering functions. Scattering functions are specified statement
+wise, and the legality of scanning the polyhedron with these di
+mensions in the specified order should be guaranteed by the spec
+ifier– in our case, an automatic transformation system. The code
+ generator does not have any information on the dependences and
+ hence, in the absence of any scattering functions would scan the
+ union of the statement polyhedra in the global lexicographic or
+der of the original iterators (statement instances are interleaved).
+ CLooG uses PolyLib [57, 42] (which in turn uses the Chernikova
+ algorithm [33]) for its core operations, and the code generated is far
+ more efficient than that by older code generators based on Fourier
+Motzkin variable elimination like Omega Codegen [46] or LooPo’s
+ internal code generator [25, 24]). Also, code generation time and
+ memory utilization are much lower [6]. Such a powerful and effi
+cient code generator is essential in conjunction with the transfor
+mation framework we develop, since the statement-wise transfor
+mations found when coupled with tiling lead to complex execution
+ reordering. This is especially so for imperfectly nested loops and
+ generation of parallel code, as will be seen in the rest of this paper.
+ 5.1 Tiling the transformed AST vs. Tiling the scattering
+ functions
+ Before proceeding further, we differentiate between using the term
+ ‘tiling’ for, (1) modeling and enabling tiling through a transforma
+tion framework (as was described in the previous section), (2) final
+generationoftiledcodefromthehyperplanesfound.Botharegen
+erallyreferredtoastiling.Ourapproachmodelstilinginthetrans
+formationframeworkbyfindingaffinetransformations thatmake
+ rectangular tilinginthetransformedspacelegal.Thehyperplanes
+ foundarethenewbasisfortheloopsinthetransformedspaceand
+ havespecialpropertiesthathavebeendetectedwhenthetransfor
+mationisfound–e.g.beingparallel,sequentialorbelongingtoa
+ bandofloopsthatcannowberectangularlytiled.Hence,thetrans
+formationframeworkguaranteeslegalityofrectangulartilinginthe
+ newspace.Thefinalgenerationof tiledloopscanbedoneintwo
+ waysbroadly, (1)directlythroughthepolyhedralcodegenerator
+ itselfinonepassitself,or(2)asapost-passontheabstractsyntax
+ treegeneratedafterapplyingthetransformation.Eachhasitsmerits
+ andbothcanbecombinedtoo.
+ For transformations that possibly lead to imperfectlynested
+ code,polyhedral tilingisanaturalwaytoget tiledcodefromthe
+ codegeneratorinonepassguaranteeinglegality.Considerthecode
+ inFigure3(a)forexample.Ifcodeisgeneratedbyjustapplyingthe
+ transformationfirst,wegetcodeshowninFigure3(b).Eventhough
+ thetransformationframeworkobtainedtwotilinghyperplanes, the
+ transformedcodeinFigure3(b)hasno2-dperfectlynestedkernel.
+ Doinga simpleunroll-jamof the imperfect loopnest is illegal
+ in this case; hence, straightforward2-d syntactic tilingviolates
+ dependences. The legalityof syntactic tilingor unroll/jam(for
+ registertiling)ofsuchloopscannotbereasonedaboutinthetarget
+ ASTeasilysinceonceweobtain the transformedcode,weare
+ outsideof thepolyhedralmodel,unlessadvancedtechniques like
+ re-entranceareused.Evenwhenre-entranceisusedtoreasonabout
+ legalitythroughdependenceanalysisonthe targetAST, suchan
+ approachwouldmisswaysoftilingthatarepossiblebyreasoning
+ about theobtained tilinghyperplanesonoriginal domains itself–wedescribeanapproachtoaccomplishthe latterwhichis the
+ subjectofSection5.Forexample,forthecodeinFigure3,2-dtiled
+ codecanbegeneratedinonepass,bothapplyingthetransformation
+ aswellasaccomplishingtiling.
+ 5.2 Tilesunderatransformation
+ Ourapproachtotilingistospecifyamodifiedhigherdimensional
+ domainand specify transformations forwhatwouldbe the tile
+ spaceloopsinthetransformedspace.Consideraverysimpleex
+ample:atwo-dimensionalloopnestwithoriginaliterators:iandj.
+ Letthetransformationfoundbec1=i,andc2=i+j,withc1,c2
+ constitutingapermutableband;hence,theycanbeblockedleading
+ to2-dtiles.Wewouldliketoobtaintargetcodethatistiledrectan
+gularlyalongc1andc2.Thedomainsuppliedtothecodegenerator
+ isahigherdimensionaldomainwiththetileshapeconstraintslike
+ thatproposedbyAncourt andIrigoin[4];but thescatteringsare
+ duplicatedforthetilespacetoo.’T’subscriptisusedtodenotethe
+ correspondingtilespaceiterator.Thetilespaceandintratileloop
+ scatteringfunctionsarespecifiedasfollows.
+ Domain Scattering
+ 0≤i≤N−1 c1T=iT
+ 0≤j≤N−1 c2T=iT+jT
+ 0≤i−32iT≤31 c1=i
+ 0≤(i+j)−32(iT+jT)≤31 c2=i+j
+ (c1T,c2T,c1,c2) ←scatter(iT,jT,i,j)
+ c1T andc2T arethetilespaceloopsinthetransformedspace.
+ Thisapproachcanseamlesslytileacrossstatementsofarbitrarydi
+mensionalities,irrespectiveoforiginalnestingstructure,aslongas
+ thec′
+ ishavedependences(inter-stmtandintra-stmt)intheforward
+ direction–this isguaranteedanddetectedbythetransformation
+ framework.
+ Withthis,weformallystatethealgorithmtomodifytheorig
+inaldomainandupdatingthestatement-wisetransformations(Al
+Algorithm1Tilingformultiplestmtsundertransformations
+ INPUTHyperplanes(statement-wise)belongingtoatilablebandofwidth
+ k: φi
+ S,φi+1
+ S ,...,φi+k−1
+ S , expressed as affine functions of corre
+sponding original iterators, ⃗iS; Original domains:DS; Tile sizes:
+ τi,τi+1,...,τi+k−1
+ 1: /*Updatethedomains*/
+ 2: foreachstatementSdo
+ 3: foreachφj
+ S=fj(⃗iS)+f0do
+ 4: Increasethedomain(DS)dimensionalitybycreatingsupernodes
+ foralloriginaliteratorsthatappearinφj
+ S
+ 5: Letthesupernodeiteratorsbe ⃗ iT
+ 6: AddthefollowingtwoconstraintstoDS:
+ τj∗fj(⃗ iTS)≤fj(⃗iS)+fj
+ 0 ≤τj∗fj(⃗ iTS)+τj−1
+ 7: endfor
+ 8: endfor
+ 9: /*Updatethetransformationmatrices*/
+ 10: foreachstatementSdo
+ 11: AddknewrowstothetransformationofSatleveli
+ 12: AddasmanycolumnsasthenumberofsupernodesaddedtoDSin
+ Step4
+ 13: foreachφj
+ S=fj(⃗iS)+fj
+ 0,j=i,...,i+k−1do
+ 14: Addasupernodeforthishyperplane:φTj
+ S=fj(⃗ iTS)
+ 15: endfor
+ 16: endfor
+ OUTPUTUpdateddomains(DS)andtransformations
+ gorithm1).The(higher-dimensional)tilespaceloopsarereferred
+ toas supernodes in thedescription. For example, in theexam
+pleabove, iT,jTweresupernodes intheoriginaldomain,while
+ c1T,c2Taresupernodes inthe transformedspace.Note that the
+ transformationmatrixcomputedforeachstatementhas thesame
+ numberofrows.
+ THEOREM1. Thesetofscatteringsupernodes,φTi
+ S,φTi+1
+ S , ...,
+ φTi+k−1
+ S obtainedfromAlgorithm1satisfythetilinglegalitycon
+dition(2)
+ Since,φj
+ S, i≤j≤i+k−1satisfy(2)andsincethesupern
+odesstepthroughanaggregationofparallelhyperplaneinstances,
+ dependencescontinuetobeintheforwarddirectionfor thescat
+teringsupernodedimensions too.Thisholds true for both intra
+ andinter-statementdependences.φTj
+ S1
+ ,φTj
+ S2
+ ,...,φTj
+ Sn
+ thusrep
+resent acommonsupernodedimensioninthe transformedspace
+ withallaffinedependencesinitsforwarddirectionornull-space.2
+ Figure5.2showstilesfor imperfectlynested1-dJacobi.Note
+ that tilingitrequiresarelativeshiftofS2byoneandskewingthe
+ spaceloopsbyafactorof twow.r.t time(asopposedtoskewing
+ byafactorofonethatisrequiredforthespacememory-inefficient
+ perfectlynestedversion).
+ Example:3-dtilesforLU Thetransformationobtainedfor the
+ LUdecompositioncodeis:
+ S1:
+ "c1
+ c2
+ c3
+ #
+ =
+ "1 0
+ 0 1
+ 1 0
+ # h k
+ j
+ i
+ S2:
+ "c1
+ c2
+ c3
+ #
+ =
+ "1 0 0
+ 0 0 1
+ 0 1 0
+ #"k
+ i
+ j
+ #
+ Hyperplanesc1, c2 andc3 are identifiedasbelongingtoone
+ tilableband.Hence,3-dtilesforLUdecompositionfromtheabove
+ transformationare specifiedas shown inFigure2. Thecode is
+ showninFigure9.
+ Tilingmultipletimes Thesametilinghyperplanescanbeusedto
+ tilemultipletimes(duetoTheorem1),forregisters,L1,L2caches,
+ andforparallelism,andthelegalityofthesameisguaranteedbythe
+ transformationframework.Thescatteringfunctionsareduplicated
+ foreachsuchlevelasitwasdoneforonelevel.Suchaguaranteeis
+for (t=0; t<T;t++){
+ for (i=2; i<N−1;i++){
+ b[i] =0.333∗(a[i−1]+a[i]
+ +a[i+1]);
+ }
+ for (j=2; j<N−1;j++){
+ a[j] =b[j];
+ }
+ }
+ (a) Original code
+ #defineS1(t,i) {b[i]=(0.333∗(a[1+i]+a[i]+a[i−1]);}
+ #defineS2(t,j) {a[j]=b[j];}
+ for (c1=0;c1<=T−1;c1++){
+ S1(c1,2);
+ for (c2=2∗c1+3;c2<=2∗c1+N−2;c2++){
+ S1(c1,−2∗c1+c2);
+ S2(c1,−2∗c1+c2−1);
+ }
+ S2(c1,N−2);
+ }
+ (b) Transformed(without tiling)
+ S1
+ S2 c1
+ c2
+ (c)Tilesunderatransformation
+ "1 0
+ 2 1
+ 0 0
+ # h t
+ i
+ i
+ +
+ "0
+ 0
+ 0
+ #
+ " 1 0
+ 2 1
+ 0 0
+ #»t
+ j
++
+ " 0
+ 1
+ 1
+ #
+ #defineS1(t,i) {b[i]=0.333∗(a[1+i]+a[i]+a[i−1]);}
+ #defineS2(t,j) {a[j]=b[j];}
+ /∗GeneratedbyCLooGv0.14.164bits in 0.02s. ∗/
+ for (c1=0;c1<=floord(T−1,256);c1++){
+ for (c2=max(0,ceild(512∗c1−253,256));
+ c2<=min(floord(N+2∗T−3,256),floord(512∗c1+N+509,256));c2++){
+ if ((c1<=floord(256∗c2−N+1,512))&&(c2>=ceild(N−1,256))){
+ if ((−N+1)%2==0){
+ S2(c1,−2∗c1+c2,(256∗c2−N+1)/2,N−2);
+ }
+ }
+ }
+ for (c3=max(max(ceild(256∗c2−N+2,2),256∗c1),0);
+ c3<=min(min(T−1,256∗c1+255),floord(256∗c2−N+256,2));c3++){
+ for (c4=256∗c2;c4<=2∗c3+N−2;c4++){
+ S1(c1,−2∗c1+c2,c3,−2∗c3+c4);
+ S2(c1,−2∗c1+c2,c3,−2∗c3+c4−1);
+ }
+ S2(c1,−2∗c1+c2,c3,N−2);
+ }
+ for (c3=max(max(0,256∗c1),ceild(256∗c2−N+257,2));
+ c3<=min(min(256∗c1+255,T−1),128∗c2−2);c3++){
+ for (c4=256∗c2;c4<=256∗c2+255;c4++){
+ S1(c1,−2∗c1+c2,c3,−2∗c3+c4);
+ S2(c1,−2∗c1+c2,c3,−2∗c3+c4−1);
+ }
+ }
+ for (c3=max(max(128∗c2−1,0),256∗c1);
+ c3<=min(min(128∗c2+126,256∗c1+255),T−1);c3++){
+ S1(c1,−2∗c1+c2,c3);
+ for (c4=2∗c3+3;c4<=256∗c2+255;c4++){
+ S1(c1,−2∗c1+c2,c3,−2∗c3+c4);
+ S2(c1,−2∗c1+c2,c3,−2∗c3+c4−1);
+ }
+ }
+ } (d)Optimizedwith tiling ( tile size 256), cloog−f3−l5
+ }
+ S1 S2 S1 S2 2
+ 6 6 6 4
+ c1
+ c2
+ c3
+ c4
+ c5
+ 3
+ 7 7 7 5=
+ 2
+ 6 6 6 4
+ 1 0 0 0 0
+ 2 1 0 0 0
+ 0 0 1 0 0
+ 0 0 2 1 0
+ 0 0 0 0 0
+ 3
+ 7 7 7 5
+ 2
+ 6 6 6 4
+ tT
+ iT
+ t
+ i
+ 1
+ 3
+ 7 7 7 5
+ 2
+ 6 6 6 4
+ 1 0 0 0 0
+ 2 1 0 0 0
+ 0 0 1 0 0
+ 0 0 2 1 1
+ 0 0 0 0 1
+ 3
+ 7 7 7 5
+ 2
+ 6 6 6 4
+ tT
+ jT
+ t
+ j
+ 1
+ 3
+ 7 7 7 5
+ 2
+ 6 6 6 4
+ c1
+ c2
+ c3
+ c4
+ c5
+ 3
+ 7 7 7 5=
+ 2
+ 6 6 6 4
+ 3 1 0 0 0
+ 2 1 0 0 0
+ 0 0 1 0 0
+ 0 0 2 1 0
+ 0 0 0 0 0
+ 3
+ 7 7 7 5
+ 2
+ 6 6 6 4
+ tT
+ iT
+ t
+ i
+ 1
+ 3
+ 7 7 7 5
+ 2
+ 6 6 6 4
+ 3 1 0 0 0
+ 2 1 0 0 0
+ 0 0 1 0 0
+ 0 0 2 1 1
+ 0 0 0 0 1
+ 3
+ 7 7 7 5
+ 2
+ 6 6 6 4
+ tT
+ jT
+ t
+ j
+ 1
+ 3
+ 7 7 7 5
+ (e)Transformationforgenerationoflocallytiledcodein(c) (f)Transformationforgenerationofparallelized+locallytiledcode
+ Figure3. TilingimperfectlynestedJacobi
+ availableevenwhensyntactictilingistobedoneasapost-passon
+ aperfectlynestbandinthetargetAST.
+ 5.3 Parallelcodegeneration
+ OncethealgorithminSec.5.2isapplied,outerparallelor inner
+ parallel loops canbe readilymarkedparallel (for examplewith
+ openmppragmas).However,unlikescheduling-basedapproaches,
+ sincewefind tilinghyperplanesand theouteronesareusedas
+ space,theremaynotbeasingleloopinthetransformedspacethat
+ satisfiesalldependences(evenifthecodeadmitsaonedimensional
+ schedule).Hence,whenoneormoreofthespaceloopssatisfiesa
+ (forward)dependence(alsocalleddoacrossloops),carehastobe
+ takenwhilegeneratingparallelcode.Hence,forpipelinedparallel
+ codes,ourapproachtocoarse-grained(tiled)sharedmemorypar
+allelcodegenerationisasdescribedinFigure2.
+ Oncethetechniquedescribedintheprevioussectionisapplied
+ togeneratethetilespacescatteringsandintra-tiledloops–depen
+dencecomponentsareall forwardandnon-negativeforanyband
+ of tilespaceloops.Hence, thesumφT1+φT2+···+φTp+1
+ satisfiesallaffinedependencessatisfiedbyφT1,φT2,...,φTp+1,
+ Algorithm2Tiledpipelinedparallelcodegeneration
+ INPUTGiventhatAlgorithm1hasbeenapplied, asetofk(statement
+wise)supernodesinthetransformedspacebelongingtoatilableband:
+ φT1
+ S,φT2
+ S,...,φTk
+ S 1: Toextractm(<k)degreesofpipelinedparallelism:
+ 2: /*Updatetransformationmatrices*/
+ 3: foreachstatementSdo
+ 4: Performthefollowingunimodulartransformationononlythescat
+teringsupernodes:φT1→φT1+φT2+···+φTm+1
+ 5: MarkφT2,φT3,...,φTm+1asparallel
+ 6: LeaveφT1,φTm+2,...,φTkassequential
+ 7: endfor
+ OUTPUTUpdatedtransformationmatrices/scatterings
+ andgivesalegalwavefront(schedule)oftiles.Sincethetransfor
+mationisonlyonthetilespace, itpreservestheshapeofthetiles.
+ Communicationstillhappensalongboundariesofφ1,φ2, ...,φs,
+ andthesameshapedtilesareusedtoscanatile,thuspreservingthe
+ benefitsoftheoptimizationperformedbytheboundingapproach.
+ Moreover,performingsuchaunimodulartransformationtothetile
+Domains
+ S1
+ S2
+ 0 ≤k≤N−1 0≤k≤N−1
+ k +1≤j ≤N−1 k+1≤i≤N−1
+ k +1≤j ≤N−1
+ 0 ≤k−32kT ≤31 0≤k−32kT ≤31
+ 0 ≤j−32jT ≤31 0≤i−32iT ≤31
+ 0 ≤j−32jT ≤31
+ Scatterings
+ S1
+ c1T = kT
+ c2T = jT
+ c3T = kT
+ c1 = k
+ c2 = j
+ c3 = k
+ (c1T,c2T,c3T,c1,c2,c3)
+ ←scatter(kT,jT,k,j)
+ S2
+ c1T = kT
+ c2T = jT
+ c3T = iT
+ c1 = k
+ c2 = j
+ c3 = i
+ (c1T,c2T,c3T,c1,c2,c3)
+ ←scatter(kT,jT,iT,k,j,i)
+ Figure 2. Tiled specification for LU
+ space introduces very less additional code complexity (modulo’s
+ do not appear in the generated code due to unimodularity).
+ In contrast, obtaining an affine (fine-grained) schedule and then
+ enabling time tiling would lead to shapes different from above our
+ approach. The above technique of adding up 1-d transforms resem
+bles that of [37] where (permutable) time partitions are summed
+ up for maximal dependence dismissal; however, we do this in the
+ tile space as opposed to for finding a schedule that dismisses all
+ dependences.
+ for (i=1; i<N; i++)
+ for (j=1; j<N; j++)
+ a[i , j] = a[i−1,j] + a[i,j−1];
+ (a) Original (sequential) code
+ for (c1=−1;c1<=floord(N−1,16);c1++)
+ #pragma omp parallel for shared(c1,a) private (c2,c3,c4)
+ for (c2=max(ceild(32∗c1−N+1,32),0);
+ c2<=min(floord(16∗c1+15,16),floord(N−1,32));c2++)
+ for (c3=max(1,32∗c2);c3<=min(32∗c2+31,N−1); c3++)
+ for (c4=max(1,32∗c1−32∗c2);
+ c4<=min(N−1,32∗c1−32∗c2+31); c4++)
+ S1(c2,c1−c2,c3,c4) ;
+ /∗ barrier happens only here (in tile space) ∗/
+ (b) Coarse-grained tile schedule
+ Figure 4. Shared memory parallel code generation example
+ Figure 4 shows a simple example with tiling hyperplanes (1,0)
+ and (0,1). Our scheme allows clean generation of parallel code
+ without any syntactic treatment. Alternate ways of generating
+ pipelined parallel code exist that insert special post/notify or wait
+/signal directives to handle dependences in the space loops [36, 24],
+ but, these require syntactic treatment. Note that not all degrees of
+ pipelined parallelism need be exploited. In practice, a few degrees
+ are sufficient; using several could introduce code complexity with
+ diminishing return.
+ Dependence
+ polyhedra
+ LooPo
+ Nested loop
+ sequences
+ scanner/parser
+       +
+ Dependence
+ tester
+ Our affine
+ transformation
+ framework
+ (parallelization + 
+locality optimization)
+ Compilable
+ target code
+ gcc/icc
+ /xlc
+ (OpenMP
+ parallelized)
+ Syntactic
+ Transformer
+ Statement−wise
+ affine transforms
+ Polyhedral
+ tile
+ specifier
+ CLooG
+ Annotated code
+ Updated domains
+ and scatterings
+ with supernodes
+ Figure 5. The PLuTo source-to-source transformation system
+ 5.4 Intra-tile reordering
+ Dueto the nature of our algorithm, even within a local tile (L1) that
+ is executed sequentially, the intra-tile loops that are actually parallel
+ do not end up being outer in the tile (Sec. 3.2): this goes against
+ vectorization of the transformed source for which we rely on the
+ native compiler. Also, the polyhedral tiled code is often complex
+ for a compiler to further analyze and say, permute and vectorize.
+ Hence, as part of a post-process in the transformation framework,
+ we move the parallel loop within a tile innermost and make use
+ of ignore dependence pragmas to explicitly force vectorization.
+ Similar reordering is possible to improve spatial locality that is
+ not considered by our cost function due to the latter being fully
+ dependence-driven. Note that the tile shapes or the schedule in the
+ tile space is not altered by such post-processing.
+ 6. Implementation
+ Theproposedframeworkhasbeenimplementedintoatool,PLuTo[1].
+ Figure 5 shows the entire tool-chain. We used the scanner, parser
+ and dependence tester from the LooPo infrastructure [38], which
+ is a polyhedral source-to-source transformer including implemen
+tations of various polyhedral analyses and transformations from
+ the literature. We used PipLib 1.3.3 [41, 18] as the ILP solver and
+ CLooG0.14.1 [13] for code generation. The transformation frame
+work takes as input, polyhedral domains and dependence polyhe
+dra from LooPo’s dependence tester, computes transformations and
+ provides it to Cloog. Compilable OpenMP parallel code is finally
+ output after some post-processing on the Cloog code.
+ Syntactic post-processing. Wehavealsointegrated an annotation
+driven system of Norris et al. [39] to perform syntactic transforma
+tions on the code generated from Cloog as a post-processing; these
+ include register tiling followed by unrolling or unroll/jamming. The
+ choice of loops to perform these transformations on is specified by
+ the transformation framework, and hence legality is guaranteed.
+ In this paper, we do not discuss any further on how exactly these
+ transformations are performed and the corresponding performance
+ improvement. They are non-trivial to perform for non-rectangular
+ iteration spaces, for example. The complementary benefits of syn
+tactic post-processing will be reported in future. However, a pre
+view of the potential performance improvement is provided for one
+ kernel in the experimental evaluation section.
+ 7. Experimental evaluation
+ In this section, we evaluate the performance of the transformed
+ codes generated by our system.
+ Comparison with previous approaches
+ Several previous papers on automatic parallelization have pre
+sented experimental results. A direct comparison is difficult since
+ the implementations of those approaches (with the exception of
+ Griebl’s [24, 38]) is not available; further most previously presented
+studiesdidnotuseanend-to-endautomatic implementation,but
+ performedsomemanualcodegenerationbasedonsolutionsgen
+eratedbyatransformationframework,orbyselectingasolution
+ fromalargespaceofsolutionscharacterized.
+ Inassessingtheeffectivenessofoursystem,wecompareper
+formanceof thegeneratedcodewith that generatedbyproduc
+tioncompilers,aswellasundertakingabest-effortfaircomparison
+ withpreviouslypresentedapproaches fromtheresearchcommu
+nity.Thecomparisonwithotherapproachesfromtheliteratureis
+ insomecases infeasiblebecausethereis insufficient information
+ forustoreconstructacompletetransformation(e.g. [2]).Foroth
+ers [37,36,35], acompletedescriptionof thealgorithmallows
+ us tomanuallyconstruct thetransformation;but sincewedonot
+ haveaccesstoanimplementationthatcanberuntodeterminethe
+ transformationmatricesorgeneratecompilableoptimizedcode,we
+ havenotattemptedanexhaustivecomparisonforallthecases.For
+ theabovereasons, thefirstkernelchosen(imperfectly-nested1-d
+ Jacobi)isarelativelysimpleone.
+ Thecurrentstate-of-the-artwithrespecttooptimizingcodehas
+ beensemi-automaticapproachesthatrequireanexperttomanually
+ guide transformations [22].As for scheduling-basedapproaches,
+ theLooPosystem[38]includesimplementationsofvariouspolyhe
+dralschedulingtechniquesincludingFeautrier’smulti-dimensional
+ timeschedulerwhichcanbecoupledwithGriebl’sspaceandFCO
+ timetilingtechniques.Wethusprovidecomparisonforsomenum
+berofcaseswiththestateof theart–(1)Griebl’sapproachthat
+ usesFeautrier’s schedules alongwithForward-Communication
+Onlyallocationstoenabletimetiling[24] thatwillbereferredto
+ as’Scheduling-based(timetiling)’and(2)Lim/Lam’saffineparti
+tioning[37,36,35]referredtoas’Affinepartitioning(maxdegree
+ parallelism,nocostfunction)’inthegraphs.Forbothofthesepre
+viousapproaches, theinputcodewasrunthroughoursystemand
+ thetransformationswereforcedtobewhatthoseapproacheswould
+ havegenerated.Bydoingso, thesecomparedalternateapproaches
+ alsoget all thebenefitsofCLooGandour tiledcodegeneration
+ scheme.
+ Experimental setup. Theresultswereobtainedonaquad-core
+ IntelCore2QuadQ6600CPUclockedat2.4GHz(1066MHz
+ FSB),witha32KBL1Dcache,8MBofL2cache(4MBshared
+ percorepair),and2GBofDDR2-667RAM,runningLinuxkernel
+ version2.6.22(x86-64). ICC10.0wastheprimarycompilerused
+ tocompile thebasecodesaswell as thesource-to-source trans
+formedcodes; itwasrunwith“-fast-funroll-loops”(-openmpfor
+ parallelizedcode); the’-fast’optionturnson-O3,-ipo,-static,
+no-prec-divonx86-64processors–theseoptionsalsoensureauto
+vectorizationinicc.TheOpenMPimplementationof iccsupports
+ nestedparallelismneededtoexploitmultipledegreesofpipelined
+ parallelismwhentheyexist.
+ Our transformationframeworkitselfrunsquitefast–withina
+ fractionofasecondforallbenchmarksconsideredhere.Alongwith
+ codegeneration time, theentiresource-to-source transformation
+ doesnot takemorethanafewsecondsforanyof thecases.The
+ OpenMP“parallelfor”directive(s)achievesthedistributionofthe
+ blocksof the tile space loop(s) amongprocessor cores.Hence,
+ executiononeachcore isasequenceofL2 tiles (orL1 tiles if
+ L2 tiling isnot done).Tilesizeswereset automaticallyusinga
+ veryroughmodel.Equaltilesizeswereusedalongalldimensions,
+ exceptwhen loopsweremarked for vectorization (Sec.5.4), in
+ whichcasethetilesizeofthelooptobevectorizedwasincreased.
+ Inallcases, theoptimizedcodeforour frameworkwasobtained
+ automaticallyinaturn-keyfashionfromtheinputsourcecode.
+ Imperfectlynestedstencil code. Theoriginal code, codeopti
+mizedbyoursystemwithout tiling,andoptimizedtiledcodeare
+ showninFigure3.Theperformanceof theoptimizedcodesare
+ showninFigure6.Speedupsrangingfrom4xto7xareobtained
+ forsinglecoreexecutionduetolocalityenhancement.Theparallel
+ speedupsarecomparedwithLim/Lam’s technique(AlgorithmA
+ in [37])whichobtains(2,-1),(3,-1)asthemaximallyindependent
+ timepartitions, andGriebl’s time tilingtechniquewhichusesan
+ FCOallocationof2t+ialongwiththeschedule2tforS1,2t+1
+ forS2.Justspacetilinginthiscasedoesnotexposesufficientpar
+allelismgranularityandaninnerspaceparallelizedcodehasvery
+ poorperformance.Thisisalsothecasewithicc’sautoparallelizer;
+ hence,we just showthesequential runtimefor iccinthiscase.
+ Analysisofcachemisseswitheachoftheschemesispresentedin
+ amoredetailedreport[10].
+ for (t=0; t<tmax;t++){
+ for (j=0; j<ny; j++)
+ ey[0][j] =exp(−coeff0∗t1);
+ for (i=1; i<nx; i++)
+ for (j=0; j<ny; j++)
+ ey[i][j] =ey[i][j]−
+ coeff1∗(hz[i][j]−hz[i−1][j]);
+ for (i=0; i<nx; i++)
+ for (j=1; j<ny; j++)
+ ex[i][j] =ex[i][j]
+ −coeff1∗(hz[i][j]−hz[i][j−1]);
+ for (i=0; i<nx; i++)
+ for (j=0; j<ny; j++)
+ hz[i][j] = hz[i][j]−
+ coeff2∗(ex[i][j+1]−ex[i][j]
+ +ey[i+1][j]−ey[i][j]);
+ }
+ 2
+ 4
+ 1 0 0
+ 1 1 0
+ 1 0 0
+ 3
+ 5
+ 2
+ 4
+ 1 0 0 0
+ 1 0 1 0
+ 1 1 0 0
+ 3
+ 5
+ 2
+ 4
+ 1 0 0 0
+ 1 0 1 0
+ 1 1 0 0
+ 3
+ 5
+ 2
+ 4
+ 1 0 0 0
+ 1 0 1 1
+ 1 1 0 1
+ 3
+ 5
+ Figure7. 2-dFDTD(originalcode)andtransformation
+ FiniteDifferenceTimeDomainelectromagnetic kernel. The
+ FDTD(FiniteDifferenceTimeDomain)codeisasshowninFig
+ure7.Thearraysexandey represent electricfields inxandy
+ directions,whilehzisthemagneticfield.Thecodehasfourstate
+ments-threeofthem3-dandone2-dandarenestedimperfectly.
+ Ourtransformationframeworkfindsthreetilinghyperplanes(allin
+ oneband-fullypermutable).Thetransformationrepresentsacom
+binationofshifting,fusionandtimeskewing.Parallelperformance
+ resultsshownarefornx=ny=2000andtmax=500.Results
+ areshowninFigure8.
+ LUdecomposition. Threetilinghyperplanesarefound–allbe
+longingtoasinglebandofpermutableloops.Thefirststatement,
+ thoughlower-dimensional,isnaturallysunkintoaa3-dimensional
+ fullypermutablespace.Thus, therearetwodegreesofpipelined
+ parallelism. Icc is unable to auto-parallelize this. Performance
+ results on the quad coremachine are shown inFigure 10(b).
+ Scheduling-basedparallelizationperformspoorlymainlydue to
+ codecomplexityarisingoutofanon-unimodular transformation,
+ thatalsoinhibitsvectorization.
+ Matrixvectortranspose. TheMVTkernel isasequenceof two
+ matrixvectortransposesasshowninFigure11.It isfoundwithin
+ anouterconvergenceloopwiththeBiconjugategradientalgorithm.
+ Theonlyinter-statementdependenceisanon-uniformread/input
+ onmatrixA.Thecostfunctionbounding(4)leadstominimization
+ ofthisdependencedistancebyfusionofthefirstMVwiththeper
+mutedversionofthesecondMV(notethatφ(⃗ t)−φ(⃗s)forthisde
+pendencebecomes0forbothc1andc2).Thishoweverleadstoloss
+ ofsynchronization-freeparallelism,since, inthefusedform,each
+ loopsatisfiesadependence.However,sincethesedependencesare
+ intheforwarddirection,theparallelcodeisgeneratedcorrespond
+ingtoonedegreeofpipelinedparallelism.Existingtechniquesdo
+8x
+ 7x
+ 6x
+ 5x
+ 4x
+ 3x
+ 2x
+ 1x
+ 4M 2M 1M 500k
+ Improvement over native compiler
+ N (space extent)
+ pluto
+ Affine partitioning (max degree parallelism)
+ Scheduling-based (time tiling)
+ icc -fast
+ (a)Singlecore:T=104
+ 0
+ 2
+ 4
+ 6
+ 8
+ 10
+ 4 3 2 1
+ GFLoPs
+ Number of cores
+ pluto
+ Affine partitioning (max degree parallelism)
+ Scheduling-based (time tiling)
+ icc -parallel -fast
+ (b)Multi-coreparallel:N=106,T=105
+ Figure6. ImperfectlynestedJacobistencil
+ 0
+ 0.5
+ 1
+ 1.5
+ 2
+ 2.5
+ 3
+ 3.5
+ 4
+ 4000 2000 1000 500 250 125
+ GFLOPs
+ N (problem size)
+ pluto
+ icc -fast / Scheduling-based (space tiling)
+ Scheduling-based (time tiling)
+ (a)Singlecore:T=500
+ 0
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 4 3 2 1
+ GFLoPs
+ Number of cores
+ pluto (1-d pipelined parallel)
+ pluto 2-d pipelined parallel
+ Scheduling-based (time tiling)
+ icc -parallel -fast / scheduling-based space tiling
+ (b)Parallel:nx=ny=2000,tmax=500
+ Figure8. 2-dFDTD
+ notconsiderinputdependences.Hence,otherapproachesonlyex
+tractsynchronization-freeparallelismfromeachoftheMVssepa
+ratelywithabarrierbetweenthetwo,givingupreuseonarrayA.
+ Figure12showstheresultsforaproblemsizeN=8000.Fusion
+ of ijwithijdoesnotexploit reuseonmatrixA,whereasthecode
+ generatedbyourtoolperformsthebest–itfusesijwithji, tilesit
+ andextractsadegreeofpipelinedparallelism.Forthiscase,results
+ arealsoshownwithfurthersyntactictransformationsperformedon
+ thePlutocode.
+ 3-DGauss-Seidelsuccessiveoverrelaxation. TheGauss-Seidel
+ computationallows tilingof all threedimensionsafter skewing.
+ Thetransformationobtainedbyour tool skews thetwospacedi
+mensionsbyafactorofoneandtwo,respectively,w.r.t time.Two
+ degreesofpipelinedparallelismcanbeextractedsubsequently,and
+ allthreedimensionscanbetiled.Figure13showstheperformance
+ improvement achievedwith2-dpipelinedparallel spaceaswell
+ as1-d: thelatter isbetter inpracticemainlyduetosimplercode.
+ Again,iccisdoesnotparallelizethis.TheabsoluteGFLoPsperfor
+mancehereisonthelowersidewhencomparedtoothercodesdue
+ toauniquedependencestructurethatpreventsauto-vectorization.
+ for (i=0; i<N;i++)
+ for (j=0; j<N;j++)
+ x1[i] =x1[i] +a[i,j]∗y1[j];
+ for (i=0; i<N;i++)
+ for (j=0; j<N;j++)
+ x2[i] =x2[i] +a[j,i]∗y2[j];
+ (a) Original
+ for (c1=0;c1<=N−1;c1++)
+ for (c2=0;c2<=N−1;c2++)
+ x1[c1] =x1[c1]+a[c1,c2]∗y1[c2];
+ x2[c2] =x2[c2]+a[c1,c2]∗y2[c1];
+ (b) Transformed
+ S1 S2
+ »c1
+ c2
+=
+ »1 0
+ 0 1–»i
+ j– »0 1
+ 1 0–»i
+ j
+Figure11.Matrixvectortranspose
+ 7.1 Analysis.
+ Allexperimentsshowveryhighspeedupswithourapproach,both
+ forsinglethreadandmulticoreparallelexecution.Theperformance
+ improvementisverysignificantoverproductioncompilersaswell
+ asstate-of-the-art fromtheresearchcommunity.Speedupranging
+ from2xto5xareobtainedoverpreviousautomatictransformation
+for (k=0; k<N;k++)
+ for (j=k+1; j<N;j++)
+ a[k][j] =a[k][j]/a[k][k];
+ for(i=k+1; i<N;i++) {
+ for (j=k+1; j<N;j++) {
+ a[i][j] =a[i][j]−a[i][k]∗a[k][j];
+ (a) Original code
+ S1 2
+ 6 6 6 6 6 4
+ c1
+ c2
+ c3
+ c4
+ c5
+ c6
+ 3
+ 7 7 7 7 7 5
+ =
+ 2
+ 6 6 6 6 6 4
+ 1 1 0 0
+ 0 1 0 0
+ 1 0 0 0
+ 0 0 1 0
+ 0 0 0 1
+ 0 0 1 0
+ 3
+ 7 7 7 7 7 5
+ 2
+ 6 4
+ kT
+ jT
+ k
+ j
+ 3
+ 7 5
+ S2 2
+ 6 6 6 6 6 4
+ c1
+ c2
+ c3
+ c4
+ c5
+ c6
+ 3
+ 7 7 7 7 7 5
+ =
+ 2
+ 6 6 6 6 6 4
+ 1 0 1 0 0 0
+ 0 0 1 0 0 0
+ 0 1 0 0 0 0
+ 0 0 0 1 0 0
+ 0 0 0 0 0 1
+ 0 0 0 0 1 0
+ 3
+ 7 7 7 7 7 5
+ 2
+ 6 6 6 6 6 4
+ kT
+ iT
+ jT
+ k
+ i
+ j
+ 3
+ 7 7 7 7 7 5
+ c2ismarkedompparallel
+ (b)1-dpipelinedparallel
+ #defineS1(zT0,zT1,k,j) {a[k][j]=a[k][j]/a[k][k];}
+ #defineS2(zT0,zT1,zT2,k,i,j) {a[i][j]=a[i][j]−a[i][k]∗a[k][j];}
+ /∗GeneratedbyCLooGv0.14.164bits in 0.02s. ∗/
+ for (c1=−1;c1<=floord(2∗N−3,32);c1++)
+ lb=max(max(ceild(16∗c1−15,32),ceild(32∗c1−N+2,32)),0);
+ ub=min(floord(32∗c1+31,32),floord(N−1,32));
+ #pragmaompparallel for shared(c1,lb,ub,a) private(c2,c3,c4,c5,c6,i,j,k,l,m,n)
+ for (c2=lb;c2<=ub;c2++)
+ for (c3=max(ceild(16∗c1−16∗c2−465,496),ceild(16∗c1−16∗c2−15,16));c3<=floord(N−1,32);c3++)
+ if (c1==c2+c3){
+ for (c4=max(0,32∗c3);c4<=min(min(32∗c3+30,N−2),32∗c2+30);c4++)
+ for (c5=max(32∗c2,c4+1);c5<=min(N−1,32∗c2+31);c5++)
+ S1(c1−c2,c2,c4,c5) ;
+ for (c6=c4+1;c6<=min(32∗c3+31,N−1);c6++)
+ S2(c1−c2,c1−c2,c2,c4,c6,c5) ;
+ }
+ for (c4=max(0,32∗c1−32∗c2);c4<=min(min(32∗c1−32∗c2+31,32∗c3−1),32∗c2+30);c4++)
+ for (c5=max(32∗c2,c4+1);c5<=min(N−1,32∗c2+31);c5++)
+ for (c6=32∗c3;c6<=min(32∗c3+31,N−1);c6++)
+ S2(c1−c2,c3,c2,c4,c6,c5) ;
+ if ((−c1==−c2−c3)&&(c1<=min(floord(32∗c2+N−33,32),floord(64∗c2−1,32)))){
+ for (c5=max(32∗c1−32∗c2+32,32∗c2);c5<=min(32∗c2+31,N−1);c5++)
+ S1(c1−c2,c2,32∗c1−32∗c2+31,c5);
+ }
+ (c) LU(1−dpipelined parallel +L1 tiled) ( tile size 32) cloog−f4−l7
+ Figure9. LUdecomposition
+ 0
+ 0.5
+ 1
+ 1.5
+ 2
+ 2.5
+ 3
+ 3.5
+ 4
+ 8K 4K 2K 1K 500 250
+ GFLOPs
+ Problem size
+ pluto
+ Scheduling-based (time tiling)
+ icc -parallel -fast
+ (a)Singlecore(L1andL2tiled)
+ 0
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+ 4 3 2 1
+ GFLOPs
+ Number of cores
+ pluto (2-d pipeline parallel)
+ pluto 1-d pipeline parallel
+ Scheduling-based (time tiling)
+ icc -parallel -fast
+ (b)Onaquadcore:N=8000
+ Figure10. LUperformance
+ approaches inmost cases,while anorder of 10x improvement
+ isobtainedover thebest nativeproductioncompilers.Linear to
+ super-linear speedups are seen for almost all compute-intensive
+ kernelsconsideredhereduetooptimizationforlocalityaswellas
+ parallelism.Tothebestofourknowledge,suchspeedup’shavenot
+ beenreportedbyanyautomaticcompilerframeworkasgeneralas
+ ours.
+ Hand-parallelizationofmanyof theexamplesweconsidered
+ hereisextremelytediousandnotfeasibleinsomecases,especially
+ whentimeskewedcodehastobepipelinedparallelizedorimper
+fectlynestedloopsareinvolved; thiscoupledbythefact that the
+ codehastobetiledforatleastforoneleveloflocalcache,anda2-d
+ pipelinedparallelscheduleof3-dtilesistobeobtainedmakesman
+ualoptimizationverycomplex.Theperformanceoftheoptimized
+ stencilcodesthroughoursystemisalreadycomparabletohandop
+timizedversionsreportedin[29].Also, formanyof thecodes,a
+ simpleparallelizationstrategyofexploitinginnerparallelismand
+ leavingtheouterloopsequential(i.e.,notimetiling)hardlyyields
+ anyparallelspeedup(Figure8(b),Figure6(b))–scheduling-based
+ approachesthatdonotperformtimetiling,orproductioncompil
+ers’auto-parallelizersperformsuchtransformations.
+ Asmentionedbefore,tilesizeswerenotoptimizedthroughany
+ searchoraconcretemodel. Inaddition, studyingtheinterplayof
+ the transformedcodeswithprefetching is important.Usingcost
+ 3.5
+ pluto (+ syntactic post-processing)
+ pluto (1-d pipelined parallel, fused (ij/ji))
+ Scheduling-based, Lim-Lam
+ 3
+ fused (ij/ij), i parallel
+ gcc -O3 (4.1.2)
+ 2.5
+ GFLOPs
+ 2
+ 1.5
+ 1
+ 0.5
+ 0
+ 1
+ 2
+ 3
+ Number of cores
+ 4
+ Figure 12. MVT performance on a quad core: N=8000
+ 4.5
+ pluto (1-d pipeline parallel)
+ 4
+ pluto (2-d pipeline parallel)
+ icc -parallel -fast
+ 3.5
+ 3
+ GFLOPs
+ 2.5
+ 2
+ 1.5
+ 1
+ 0.5
+ 0
+ 1
+ 2
+ 3
+ Number of cores
+ 4
+ Figure 13. 3-D Gauss Seidel on a quad core: Nx = Ny = 2000;
+ T=1000
+ models for effective tile size determination with some amount of
+ empirical search, in a manner decoupled with the pure model
+driven scheme presented here, we expect to move performance
+ closer to the machine peak. Integration of these techniques is in
+ progress. For simpler codes like matrix-matrix multiplication, this
+ latter phase of optimization, though very simple and straightfor
+ward when compared to the rest of our system, brings most of the
+ benefits. We are also integrating complementary syntactic transfor
+mations on the generated code: note that this latter phase fully relies
+ onthe transformation framework for correctness and systematic ap
+plication. Additional experimental results and comments about the
+ optimized codes and transformations are available in an extended
+ report [10].
+ 8. Related work
+ Iteration space tiling [28, 58, 48, 61] is a standard approach for
+ aggregating a set of loop iterations into tiles, with each tile be
+ing executed atomically. It is well known that it can improve reg
+ister reuse, improve locality and minimize communication. Re
+searchers have considered the problem of selecting tile shape and
+ size to minimize communication, improve locality or minimize fin
+ish time [5, 11, 26, 27, 48, 50, 60]. However, these studies were
+ restricted to very simple codes– like single perfectly nested loop
+ nests with uniform dependences and/or sometimes loop nests of
+ a particular depth. To the best of our knowledge, these works have
+ not been extended to more general cases and the cost functions pro
+posed therein not been implemented to allow a direct comparison
+ for those restricted cases. Our work is in the direction of a prac
+tical cost function that works for the general case (any polyhedral
+ program or one that can be approximated into it) as opposed to a
+ more sophisticated function for restrictive input. With such a func
+tion, we are able to keep the problem linear, and since sparse ILP
+ formulations that result here are solved very quickly, we are at a
+ sweet-spot between cost-function sophistication and scalability to
+ real-world programs. Refinements to the function that still keep it
+ linear are discussed in Section 3.10 of [8]. Note that our function
+ does not capture tile size optimization, but our results show that
+ decoupling optimization of tile shapes and sizes is a practical and
+ very effective approach; all the performance improvement shown
+ were with tile sizes that were selected with rough thumb rules au
+tomatically.
+ Ahmed et al. [2] proposed a framework for data locality op
+timization of imperfectly nested loops for sequential execution. It
+ was amongthefirst attempts to tile imperfectly nested loops. Based
+ on the description of the heuristic approach to minimizing reuse
+ distances [2], it would appear that it is not scalable [53]. Some
+ specialized works [52, 62] also exist on tiling a restricted class of
+ imperfectly nested loops for locality.
+ Loop parallelization has been studied extensively. The reader is
+ referred to the survey of Boulet et al. [12] for a detailed summary
+ of earlier parallelization algorithms– these restricted the input
+ loop forms and/or were based on weaker dependence abstractions
+ than exact polyhedral dependences [3, 17, 16, 59]. Automatic
+ parallelization efforts in the polyhedral model broadly fall into
+ two classes: (1) scheduling/allocation-based, and (2) partitioning
+based. The works of Feautrier [20, 21], Darte and Vivien [17]
+ and Griebl [24] (to some extent) fall into the former class, while
+ Lim/Lam’s approach [37, 36, 35] falls into the second class. We
+ now compare our approach with previous approaches from both
+ classes.
+ Pure scheduling-based approaches are geared towards find
+ing minimum latency schedules or maximum fine-grained paral
+lelism, as opposed to tileability for coarse-grained parallelization
+ with minimized communication and improved locality. Clearly, on
+ most modern parallel architectures, at least one level of coarse
+grained parallelism is desired as communication/synchronization
+ costs matter, and so is improving locality. Several works are based
+ on such schedules [7, 24, 14, 45, 44].
+ Griebl [24] presents an integrated framework for optimizing
+ locality and parallelism with space and time tiling, by treating
+ tiling as a post-processing step after a schedule is found. When
+ schedules are used, the inner parallel (space) loops can be readily
+ tiled. In addition, if coarser granularity of parallelism is desired,
+ Griebl’s FCO approach finds an allocation that satisfies the forward
+ communication-only constraint: this enables time tiling. As shown
+ elsewhere [8] from a theoretical standpoint and as demonstrated
+ here through experiments, using schedules as one of the loops is
+ not best suited for communication and locality optimization as well
+ as target code complexity.
+ Lim and Lam [37, 36] proposed a framework that identifies
+ outer parallel loops (communication-free space partitions) and per
+mutable loops (time partitions) to maximize the degree of paral
+lelism and minimize the order of synchronization. They employ
+ the same machinery for blocking [35]. Several (infinitely many)
+ solutions equivalent in terms of the criterion they optimize for re
+sult from their algorithm, and these significantly differ in perfor
+mance. No metric is provided to differentiate between these solu
+tions as maximally independent solutions are sought, without using
+ any cost function. As shown through this work, without a cost func
+tion, solutions obtained even for simple input may be unsatisfactory
+ with respect to communication cost, locality, and target code com
+plexity.
+ Our approach is closer to the latter class of partitioning-based
+ approaches. However, to the best of our knowledge, it is the first
+ to explicitly model tiling in a polyhedral transformation frame
+work, thereby enabling the effective extraction of coarse-grained
+ parallelism along with data locality optimization. At the same time,
+ codes which cannot be tiled or only partially tiled are all handled,
+ and traditional transformations are captured.
+ In addition to model-based approaches, semi-automatic and
+ search-based transformation frameworks in the polyhedral model
+ also exist [30, 14, 22, 45, 44]. Cohen et al. [14] and Girbal et al. [22]
+ proposed and developed a powerful framework (URUK/WRAP-IT)
+ to compose and apply sequences of transformations in a semi
+automatic fashion. Transformations are applied automatically, but
+ specified manually by an expert. A limitation of the recent iterative
+ polyhedral compilation approaches [45, 44] is that the constructed
+ search space does not include tiling and its integration poses a non
+trivial challenge. Though our system now is fully model-driven,
+ empirical iterative optimization would be beneficial on comple
+mentary aspects, such as determination of optimal tile sizes and
+ unroll factors, and in other cases when interactions with the under
+lying hardware and native compiler cannot be well-captured.
+ Code generation under multiple affine mappings was first ad
+dressed by Kelly et al. [31]. Significant advances relying on new
+ algorithms and mathematical machinery were made by Quiller´ e et
+ al. [47] and recently by Bastoul et al. [6], resulting in a power
+ful open-source code generator, CLooG [13]. Our tiled code gen
+eration scheme uses Ancourt and Irigoin’s [4] classic approach to
+ specify domains with fixed tile sizes and shape information, but
+ combines it with CLooG’s support for scattering functions to allow
+ generation of tiled code for multiple domains under the computed
+ transformations. Goumas et al. [23] reported an alternate tiled code
+ generation scheme to Ancourt and Irigoin’s [4]) to address the in
+efficiency involved in using Fourier-Motzkin elimination– how
+ever, this is no longer an issue as the state-of-the-art uses efficient
+ algorithms [47, 6] based on PolyLib [57, 42] and its implementa
+tion of the Chernikova algorithm [33]. Techniques for parametric
+ tiled code generation [49, 32] were recently proposed for single
+ statement domains for which rectangular tiling is valid. These tech
+niques complement our system very well and we intend to explore
+ the possibility of integrating them.
+ 9. Conclusions
+ We have presented the design and implementation of a fully au
+tomatic polyhedral source-to-source program optimizer that can
+ simultaneously optimize sequences of arbitrarily nested loops for
+ parallelism and locality. Through this work, we have shown the
+ practicality and promise of automatic transformation in the poly
+hedral model, beyond what is possible by current production com
+pilers. We have implemented our framework in a tool to generate
+ OpenMPparallel code from C program sections automatically. Ex
+perimental results show significantly higher performance for sin
+gle core and parallel execution on multi-cores, when compared
+ with production compilers as well as state-of-the-art research ap
+proaches. Our system also leaves a lot of flexibility for future op
+timization, mainly iterative and empirical and/or through more so
+phisticated cost models, and promise to achieve performance close
+ to or exceed manually developed codes.
+ The transformation system presented here is not just applicable
+ to C/Fortran code, but to any input language from which polyhedra
+ can be extracted and analyzed. Since our entire transformation
+ framework works in the polyhedral abstraction, only the polyhedra
+ extractor and dependence tester need to be adapted to accept a
