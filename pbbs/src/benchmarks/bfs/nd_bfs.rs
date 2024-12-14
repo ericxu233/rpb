@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::graph::*;
 use std::sync::{Arc, Mutex};
 
-pub fn bfs(source: usize, g: &Graph, initial_parents: &mut Vec<i32>, verbose: bool) -> (usize, usize) {
+pub fn bfs(source: usize, g: &Graph, verbose: bool) -> (usize, usize) {
     let n = g.num_vertices();
     let _m = g.num_edges();
     
@@ -16,9 +16,6 @@ pub fn bfs(source: usize, g: &Graph, initial_parents: &mut Vec<i32>, verbose: bo
     visited[source].store(true, Ordering::SeqCst);
     let mut total_visited = 0;
     let mut round = 0;
-
-    // Keep track of our parents reference
-    let parents = initial_parents;
 
     // Continue while frontier is not empty
     while !frontier.is_empty() {
@@ -39,9 +36,7 @@ pub fn bfs(source: usize, g: &Graph, initial_parents: &mut Vec<i32>, verbose: bo
         let total_size = total;
 
         let frontier_next = vec![-1; total_size];
-        
-        // Create fresh references for this iteration
-        let parents_ref = Arc::new(Mutex::new(&mut *parents));
+
         let f_next = Arc::new(Mutex::new(frontier_next));
 
         frontier
@@ -55,10 +50,8 @@ pub fn bfs(source: usize, g: &Graph, initial_parents: &mut Vec<i32>, verbose: bo
                     let ngh = ngh as usize;
                     if !visited[ngh].load(Ordering::Relaxed) &&
                        !visited[ngh].swap(true, Ordering::SeqCst) {
-                        let mut p = parents_ref.lock().unwrap();
                         let mut fnxt = f_next.lock().unwrap();
                         fnxt[offset + j] = ngh as i32;
-                        p[ngh] = v as i32;
                     }
                 }
             });
@@ -70,8 +63,6 @@ pub fn bfs(source: usize, g: &Graph, initial_parents: &mut Vec<i32>, verbose: bo
             .map(|x| x as usize)
             .collect();
     }
-
-    parents[source] = source as i32;
 
     if verbose {
         println!("BFS completed in {} rounds", round);

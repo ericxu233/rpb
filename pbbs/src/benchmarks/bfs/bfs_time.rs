@@ -73,7 +73,7 @@ pub fn run(
         rounds,
         Duration::new(1, 0),
         || { unsafe { *(parents_ptr as *mut Vec<i32>).as_mut().unwrap() = vec![-1; n]; } },
-        || { f(source, g, &mut parents, verbose); },
+        || { f(source, g, verbose); },
         || {},
     );
 
@@ -184,8 +184,7 @@ fn main() {
 
     // Check results if requested
     if args.check {
-        let is_correct = check(&g, &parents, args.source);
-        println!("Result is {}", is_correct);
+        panic!("Current implementation only implements nd_bfs which does not support results checking");
     }
 
     // Write results if output file specified
