@@ -98,3 +98,22 @@ test    = false
 name    = "dr"
 path    = "src/benchmarks/delaunay_refine/dr_time.rs"
 test    = false
+
+# WordCount
+[[bin]]
+name    = "wc"
+path    = "src/benchmarks/word_counts/wc_time.rs"
+test    = false
+
+# NearestNeighbors
+[[bin]]
+name    = "knn"
+path    = "src/benchmarks/nearest_neighbors/knn_time.rs"
+test    = false
+
+# BreadthFirstSearch
+[[bin]]
+name    = "bfs"
+path    = "src/benchmarks/bfs/bfs_time.rs"
+test    = false
+

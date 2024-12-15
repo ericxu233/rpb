@@ -198,9 +198,10 @@ impl Graph {
     { self.n }
 
     pub fn num_edges(&self) -> usize {
-        if self.degrees.len() == 0 { self.m }
-        else {
-            todo!("not yet implemented!");
+        if self.degrees.len() == 0 { 
+            self.m 
+        } else {
+            self.degrees.iter().map(|&x| x as usize).sum()
         }
     }
 
