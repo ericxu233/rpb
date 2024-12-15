@@ -1,8 +1,8 @@
 ## Final Report
 ## Team members
-Hanyang (Eric) Xu 1006153092 hyeric.xu@mail.utoronto.ca 
-Steven Hill 101811301 sd.hill@mail.utoronto.ca 
-James Yen 1005788355 james.yen@mail.utoronto.ca
+Hanyang (Eric) Xu 1006153092 hyeric.xu@mail.utoronto.ca  
+Steven Hill 101811301 sd.hill@mail.utoronto.ca  
+James Yen 1005788355 james.yen@mail.utoronto.ca  
 
 ## Motivation
 As Rust quickly rises in popularity, a concerted effort has been made to explore and improve its parallel performance.  Through the detection of concurrency errors at compile time, Rust promises to enable fearless parallelism with zero costs[4]. This promise has attracted groups to research parallelism in Rust and try to increase its performance. Currently, there is an effort to integrate Cilk keywords into Rust via TAPIR[1], which would help close the performance gap between parallel Rust and Parallel C. Cilk adds in keywords to Rust to represent parallelism but also allow the compiler to perform serial optimizations. This is accomplished by extending Rust’s IR to represent the parallel flow[2]. However, due to the relatively young age of the language, many of the tools required for this work have not yet been developed. Tools such as benchmarks can be useful to compare how different changes to the Rust compiler can impact the rust’s performance. The development of these benchmarks can also provide insight into the shortcomings and issues regarding fearless parallelism.
